@@ -97,7 +97,7 @@ npm run dev
 
 ### 4. Deploy to Vercel
 
-Import the repo in Vercel, add every variable from `.env.example`, and deploy. `vercel.json` schedules the worker every 5 minutes plus the daily summary (7pm Lagos) and weekly report (Monday 8am Lagos). Vercel's free plan only runs crons once a day, so for the worker use Supabase instead: edit and run `supabase/cron.sql` (it calls `/api/worker` every minute). Webhooks also trigger the worker straight away, so replies don't wait for the cron.
+Import the repo in Vercel, add every variable from `.env.example`, and deploy. `vercel.json` runs the app in Dublin (next to a Supabase project in `eu-west-1`) and schedules the daily summary (7pm Lagos) and weekly report (Monday 8am Lagos). Vercel's free plan only allows once-a-day crons, so the job worker is scheduled from Supabase: edit and run `supabase/cron.sql` (it calls `/api/worker` every minute). Webhooks also trigger the worker straight away, so replies don't wait for the cron.
 
 ### 5. Meta (WhatsApp + Instagram)
 
