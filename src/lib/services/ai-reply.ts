@@ -8,11 +8,29 @@ import type { Conversation, Customer, Message, Vendor } from "../types";
 import { SupabaseAgentStore } from "./agent-store";
 import { sendToConversation } from "./messaging";
 import { transcribe } from "./transcribe";
+import { lagosStartOfDay } from "./reports";
+import { audit } from "./notify";
 
 type Block = Anthropic.Beta.BetaContentBlockParam;
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 const HISTORY_LIMIT = 20;
 const SUMMARISE_AFTER = 30;
+/** More AI replies than this to one customer in an hour looks like abuse or a loop: a person takes over. */
+export const MAX_AI_REPLIES_PER_HOUR = 30;
+
+/** Stops the AI when the vendor's daily budget is spent or one chat is hammering it. Returns the reason, or null to go ahead. */
+async function spendingGuard(db: SupabaseClient, conv: Conversation & { vendor: Vendor }): Promise<string | null> {
+  const hourAgo = new Date(Date.now() - 3600_000).toISOString();
+  const { count } = await db.from("messages").select("id", { count: "exact", head: true })
+    .eq("conversation_id", conv.id).eq("sender", "ai").gt("created_at", hourAgo);
+  if ((count ?? 0) >= MAX_AI_REPLIES_PER_HOUR) return "Unusually many messages from this customer in the last hour";
+
+  const { data: usage } = await db.from("ai_usage").select("cost_usd_micros")
+    .eq("vendor_id", conv.vendor_id).gte("created_at", lagosStartOfDay().toISOString());
+  const spentUsd = (usage ?? []).reduce((s, u) => s + Number(u.cost_usd_micros), 0) / 1e6;
+  if (spentUsd >= Number(conv.vendor.ai_daily_budget_usd)) return "Today's AI budget for this shop is used up";
+  return null;
+}
 
 async function download(db: SupabaseClient, path: string) {
   const { data, error } = await db.storage.from("chat-media").download(path);
@@ -61,13 +79,15 @@ async function buildIncoming(db: SupabaseClient, pending: Message[]) {
   return { blocks, latestImagePath };
 }
 
-export async function aiReply(db: SupabaseClient, conversationId: string) {
+/** Returns the id of the newest customer message it handled (or looked at), so a later sweep can spot anything missed. */
+export async function aiReply(db: SupabaseClient, conversationId: string): Promise<string | null> {
+  let lastHandled: string | null = null;
   for (let round = 0; round < 3; round++) {
     const { data } = await db.from("conversations")
       .select("*, customer:customers(*), vendor:vendors(*)").eq("id", conversationId).single();
-    if (!data) return;
+    if (!data) return lastHandled;
     const conv = data as Conversation & { customer: Customer; vendor: Vendor };
-    if (conv.status !== "ai" || !conv.vendor.ai_enabled || conv.vendor.status !== "live") return;
+    if (conv.status !== "ai" || !conv.vendor.ai_enabled || conv.vendor.status !== "live") return lastHandled;
 
     let query = db.from("messages").select("*").eq("conversation_id", conversationId)
       .order("created_at", { ascending: false }).limit(60);
@@ -77,7 +97,15 @@ export async function aiReply(db: SupabaseClient, conversationId: string) {
 
     const lastOut = messages.map((m) => m.direction).lastIndexOf("out");
     const pending = messages.slice(lastOut + 1).filter((m) => m.direction === "in");
-    if (!pending.length) return;
+    if (!pending.length) return lastHandled;
+    lastHandled = pending[pending.length - 1].id;
+
+    const blocked = await spendingGuard(db, conv);
+    if (blocked) {
+      await db.from("conversations").update({ status: "human", needs_attention: true, handoff_reason: blocked }).eq("id", conversationId);
+      await audit(db, conv.vendor_id, "ai_blocked", "conversation", conversationId, { reason: blocked });
+      return lastHandled;
+    }
     const earlier = messages.slice(0, lastOut + 1).slice(-HISTORY_LIMIT);
 
     const { blocks, latestImagePath } = await buildIncoming(db, pending);
@@ -113,8 +141,18 @@ export async function aiReply(db: SupabaseClient, conversationId: string) {
     const newest = pending[pending.length - 1].created_at;
     const { count } = await db.from("messages").select("id", { count: "exact", head: true })
       .eq("conversation_id", conversationId).eq("direction", "in").gt("created_at", newest);
-    if (!count) return;
+    if (!count) return lastHandled;
   }
+  return lastHandled;
+}
+
+/** Catches a customer message that arrived in the instant a reply job was finishing. */
+export async function aiSweep(db: SupabaseClient, conversationId: string, lastHandled: string) {
+  const { data: conv } = await db.from("conversations").select("status").eq("id", conversationId).single();
+  if (conv?.status !== "ai") return false;
+  const { data: newest } = await db.from("messages").select("id, direction").eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  return Boolean(newest && newest.direction === "in" && newest.id !== lastHandled);
 }
 
 async function foldIntoSummary(db: SupabaseClient, conv: Conversation, messages: Message[]) {

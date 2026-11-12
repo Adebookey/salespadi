@@ -11,11 +11,11 @@ A done-for-you AI sales assistant for Nigerian Instagram and WhatsApp vendors. C
 | **Channels** | WhatsApp Cloud API and Instagram DMs in one inbox; human takeover and hand-back; 24-hour window rules; WhatsApp templates outside the window; Instagram comment-to-DM; story replies |
 | **AI agent** | Claude with tools over the live catalog (Haiku for routine chats, Sonnet for photos and complaints). Never states a price, stock level or fee that didn't come from a tool. Hands off on complaints, refunds, discounts, bulk and custom requests. Reads customer screenshots. Pidgin on/off per vendor. Rolling conversation summary keeps context small |
 | **Catalog** | Products, options (size/colour) with price and stock, photos, Instagram post import (drafts), low-stock alerts, restock alerts to customers who asked |
-| **Orders & payments** | Orders with stock checks and delivery-zone fees; Paystack links verified by webhook *and* API; bank transfer with receipt screenshot and one-tap confirm; pay on delivery; reminders at 2h and 20h; receipt after payment; Google Sheet sync |
+| **Orders & payments** | Orders that reserve stock when placed (released if unpaid after 48h or cancelled) with delivery-zone fees; order numbers per vendor; Paystack links verified by webhook *and* API; bank transfer with receipt screenshot and one-tap confirm; pay on delivery; reminders at 2h and 20h; receipt after payment; Google Sheet sync |
 | **Delivery** | Status updates to the customer at each step; rider link (no login) to mark picked up / delivered; feedback request after delivery |
 | **Vendor side** | Daily WhatsApp summary; weekly report; WhatsApp commands to your platform number (`CONFIRM 1042`, `REJECT 1042`, `ORDERS`, `PAUSE`, `RESUME`, or "price of red heels is 18000"); vendor login with owner/staff roles |
 | **Your dashboard** | Multi-vendor workspace, onboarding wizard, AI studio (test any vendor's assistant on their real catalog, with tool traces and cost), escalation queue across vendors, AI cost per vendor vs. their fee, subscription tracking |
-| **Platform** | Supabase Postgres with row-level security per vendor, encrypted tokens and keys (AES-256-GCM), audit log, job queue with retries and backoff, webhook signature checks and de-duplication |
+| **Platform** | Supabase Postgres with row-level security per vendor, encrypted tokens and keys (AES-256-GCM), audit log, job queue with retries and backoff, webhook signature checks and de-duplication, daily AI budget per vendor, weekly Instagram token refresh, automatic clean-up of old webhook data and finished jobs |
 
 ## Architecture
 
@@ -105,7 +105,7 @@ Import the repo in Vercel, add every variable from `.env.example`, and deploy. `
 2. Webhooks:
    - WhatsApp: callback `https://YOUR-APP/api/webhooks/whatsapp`, verify token = `META_VERIFY_TOKEN`, subscribe to `messages`.
    - Instagram: callback `https://YOUR-APP/api/webhooks/instagram`, same token, subscribe to `messages` and `comments`.
-3. For each vendor: add their number to a WhatsApp Business Account, create a System User token with `whatsapp_business_messaging`, and paste the phone number ID and token in **Setup → Channels**. For Instagram, the vendor needs a professional account; generate a long-lived token with Instagram Login and paste it.
+3. For each vendor: add their number to a WhatsApp Business Account, create a System User token with `whatsapp_business_messaging` and `whatsapp_business_management`, and paste the phone number ID, WhatsApp Business Account ID and token in **Setup → Channels**. For Instagram, the vendor needs a professional account; generate a long-lived token with Instagram Login and paste it.
 4. Create two **utility templates** on your platform WhatsApp number, each with one body variable:
    - `vendor_alert`: "SalesPadi alert: {{1}}"
    - `order_update` (on each vendor's WABA too): "Update on your order: {{1}}"
@@ -138,5 +138,6 @@ Before a vendor goes live, use **AI studio** to chat with their assistant on the
 - **Meta's AI policy.** WhatsApp restricts general-purpose AI assistants on the Business API. SalesPadi's assistant is scoped to one vendor's products and orders; keep it that way, and keep the option of Meta's own Business Agent for vendors who want it.
 - **24-hour window.** Free-form WhatsApp and Instagram messages only go out within 24 hours of the customer's last message. Order updates and alerts fall back to the approved templates above; broadcasts outside the window need an approved marketing template.
 - **Voice notes.** Claude doesn't read audio. Set `TRANSCRIPTION_URL` to an OpenAI-compatible transcription endpoint to transcribe them; without it, the assistant politely asks the customer to type.
-- **Costs.** AI cost is tracked per vendor on the **AI costs** page against what they pay you. Review fees when the exchange rate moves.
+- **Team logins.** Adding a person on the Team page creates their account and shows a one-time password to pass on; they change it under Account. No email is involved.
+- **Costs.** Each vendor has a daily AI cap (default $2, set on the Billing page); when it's reached, chats wait for a person. AI cost is tracked per vendor on the **AI costs** page against what they pay you. Review fees when the exchange rate moves.
 - **Data protection (NDPA).** Tokens and keys are encrypted; delete a customer's data by deleting their `customers` row (conversations, messages and restock requests cascade; orders keep the order but drop the link).

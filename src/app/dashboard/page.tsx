@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { Badge, Card, Empty, LinkButton, PageHeader, Stat } from "@/components/ui";
 import { formatNaira } from "@/lib/money";
 import type { Vendor } from "@/lib/types";
+import { lagosStartOfDay } from "@/lib/services/reports";
 
 export default async function DashboardHome() {
   const { supabase, isOperator } = await getSession();
@@ -15,8 +16,7 @@ export default async function DashboardHome() {
     if (!vendors.length) return <Empty title="No shop yet">Ask your SalesPadi manager to add you to your shop.</Empty>;
   }
 
-  const since = new Date();
-  since.setHours(0, 0, 0, 0);
+  const since = lagosStartOfDay();
   const [{ count: escalations }, { data: paidToday }, { count: liveCount }] = await Promise.all([
     supabase.from("conversations").select("id", { count: "exact", head: true }).eq("needs_attention", true),
     supabase.from("orders").select("total_kobo").gte("paid_at", since.toISOString()),

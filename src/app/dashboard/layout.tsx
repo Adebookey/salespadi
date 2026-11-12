@@ -28,7 +28,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             ))}
           </nav>
           <form action="/auth/signout" method="post" className="flex items-center gap-3">
-            <span className="hidden text-xs text-gray-500 md:inline">{profile?.full_name || user.email}</span>
+            <Link href="/dashboard/account" className="text-xs text-gray-500 hover:text-gray-900">{profile?.full_name || user.email}</Link>
             <button className="text-sm text-gray-600 hover:text-gray-900">Sign out</button>
           </form>
         </div>

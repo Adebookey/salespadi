@@ -68,13 +68,18 @@ export class MemoryStore implements AgentStore {
     const zone = this.zones.find((z) => z.id === input.delivery_zone_id);
     if (!zone) throw new Error("Unknown delivery zone");
     let subtotal = 0;
-    const items = input.items.map((i) => {
+    const lines = input.items.map((i) => {
       const product = this.catalog.find((p) => p.variants.some((v) => v.id === i.variant_id));
       const v = product?.variants.find((x) => x.id === i.variant_id);
-      if (!product || !v) throw new Error(`Unknown option ${i.variant_id}`);
+      if (!product || !v) throw new Error(`Option ${i.variant_id} is not available`);
+      if (v.stock === 0) throw new Error(`${product.name} (${v.label}) is sold out`);
       if (v.stock < i.quantity) throw new Error(`Only ${v.stock} left of ${product.name} (${v.label})`);
-      subtotal += v.price_kobo * i.quantity;
-      return { name: product.name, variant_label: v.label, quantity: i.quantity };
+      return { product, v, quantity: i.quantity };
+    });
+    const items = lines.map(({ product, v, quantity }) => {
+      v.stock -= quantity; // stock is reserved when the order is placed
+      subtotal += v.price_kobo * quantity;
+      return { name: product.name, variant_label: v.label, quantity };
     });
     const order = {
       id: `order-${this.seq}`, number: this.seq++, status: "pending" as const,

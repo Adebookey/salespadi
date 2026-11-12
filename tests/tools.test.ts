@@ -57,7 +57,7 @@ describe("tools over the demo catalog", () => {
       items: [{ variant_id: "p-redheels-39", quantity: 3 }], delivery_zone_id: "zone-island",
       delivery_address: "12 Adeola Odeku, VI", customer_name: "Amaka Obi", customer_phone: "08031234567", notes: "",
     }, ctx(store))) as { error: string };
-    expect(tooMany.error).toMatch(/Only 2 left/);
+    expect(tooMany.error).toMatch(/sold out/); // the first order reserved both pairs
   });
   it("creates a payment link and records transfer choice", async () => {
     const store = demoStore();

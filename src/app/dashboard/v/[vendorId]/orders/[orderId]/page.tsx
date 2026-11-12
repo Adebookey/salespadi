@@ -32,7 +32,12 @@ export default async function OrderPage({ params }: { params: Promise<{ vendorId
     urls?.forEach((u) => u.path && u.signedUrl && signed.set(u.path, u.signedUrl));
   }
   const pendingTransfer = o.payments.find((p) => p.method === "transfer" && p.status === "pending");
-  const unpaid = o.status === "pending" || o.status === "awaiting_payment";
+  const unpaid = !o.paid_at && o.status !== "cancelled" && o.status !== "delivered";
+  const awaiting = o.status === "pending" || o.status === "awaiting_payment";
+  // Pay on delivery: the order goes out before it is paid.
+  const next = o.payment_method === "cod" && awaiting
+    ? [{ to: "packed" as OrderStatus, label: "Mark packed" }, { to: "out_for_delivery" as OrderStatus, label: "Out for delivery" }, { to: "cancelled" as OrderStatus, label: "Cancel" }]
+    : (NEXT[o.status] ?? []);
   const setStatus = setOrderStatus.bind(null, vendorId, orderId);
 
   return (
@@ -57,7 +62,7 @@ export default async function OrderPage({ params }: { params: Promise<{ vendorId
             </tbody>
           </table>
           <div className="mt-4 flex flex-wrap gap-2">
-            {(NEXT[o.status] ?? []).map((n) => (
+            {next.map((n) => (
               <form key={n.to} action={setStatus.bind(null, n.to)}><Button variant={n.to === "cancelled" ? "ghost" : "primary"} className={n.to === "cancelled" ? "text-red-600" : ""}>{n.label}</Button></form>
             ))}
           </div>
@@ -81,7 +86,7 @@ export default async function OrderPage({ params }: { params: Promise<{ vendorId
                     <img src={signed.get(p.proof_url)} alt="Transfer receipt" className="mt-2 max-h-72 rounded ring-1 ring-gray-200" />
                   </a>
                 )}
-                {p.method === "transfer" && p.status === "pending" && unpaid && (
+                {p.method === "transfer" && p.status === "pending" && awaiting && (
                   <div className="mt-2 flex gap-2">
                     <form action={confirmTransfer.bind(null, vendorId, orderId, p.id)}><Button>Confirm payment received</Button></form>
                     <form action={rejectTransfer.bind(null, vendorId, orderId, p.id)}><Button variant="secondary">Not received</Button></form>
@@ -92,12 +97,15 @@ export default async function OrderPage({ params }: { params: Promise<{ vendorId
           </ul>
           {unpaid && (
             <div className="mt-3 flex flex-wrap gap-2">
-              <ActionForm action={sendPaymentLink.bind(null, vendorId, orderId)} className="space-y-2">
-                <SubmitButton variant="secondary" pendingText="Sending…">Send Paystack link</SubmitButton>
-              </ActionForm>
-              {!pendingTransfer && <form action={confirmTransfer.bind(null, vendorId, orderId, null)}><Button variant="secondary">Mark paid manually</Button></form>}
+              {awaiting && o.payment_method !== "cod" && (
+                <ActionForm action={sendPaymentLink.bind(null, vendorId, orderId)} className="space-y-2">
+                  <SubmitButton variant="secondary" pendingText="Sending…">Send Paystack link</SubmitButton>
+                </ActionForm>
+              )}
+              {!pendingTransfer && <form action={confirmTransfer.bind(null, vendorId, orderId, null)}><Button variant="secondary">{o.payment_method === "cod" ? "Cash collected (mark paid)" : "Mark paid manually"}</Button></form>}
             </div>
           )}
+          {awaiting && o.payment_method !== "cod" && <p className="mt-2 text-xs text-gray-500">The items are held for this customer. If it isn&apos;t paid within 48 hours the order is cancelled and the stock goes back on sale.</p>}
         </Card>
       </div>
 

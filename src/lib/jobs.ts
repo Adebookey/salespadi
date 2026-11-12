@@ -2,6 +2,9 @@
 import "server-only";
 import { adminClient } from "./supabase/admin";
 
+/** How long an AI reply waits so a burst of customer messages gets one answer. */
+export const AI_REPLY_DELAY_MS = 4000;
+
 export interface EnqueueOptions {
   runAt?: Date;
   /** Jobs with the same dedupe key are only enqueued once (e.g. one AI reply per burst of messages). */

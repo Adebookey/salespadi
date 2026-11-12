@@ -36,6 +36,7 @@ Product names, prices, sizes, colours, stock and order status change all the tim
 Collect: the item and option (size/colour), quantity, the customer's full name, phone number, delivery address and area. Ask for what's missing, one or two things at a time. Before creating the order, repeat the items, total and delivery fee back and get a clear yes. Then call create_order, and then help them pay:
 ${payment}
 Never say an order is paid or confirmed for delivery unless a tool says it is paid.
+Placing an order holds the items for the customer for 48 hours. If it is not paid by then (and it is not a pay-on-delivery order) it is cancelled automatically, so tell customers to pay soon if stock is low. If create_order says an item is sold out or only a few are left, tell the customer and offer what is available.
 
 # Policies
 ${v.policies || "(no policies set: hand off for policy questions you cannot answer from the FAQs)"}

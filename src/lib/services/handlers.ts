@@ -7,8 +7,9 @@ import { enqueue } from "../jobs";
 import { parseWhatsAppWebhook } from "../channels/whatsapp";
 import { parseInstagramWebhook } from "../channels/instagram";
 import { processComment, processInboundMessage, processStatuses } from "./inbound";
-import { aiReply } from "./ai-reply";
-import { afterPaid, markPaid } from "./orders";
+import { aiReply, aiSweep } from "./ai-reply";
+import { cleanup, refreshInstagramTokens } from "./maintenance";
+import { afterPaid, expireUnpaidOrder, markPaid } from "./orders";
 import { sendToOrderCustomer } from "./messaging";
 import { syncOrderToSheet } from "./sheets";
 import { sendDailySummary, sendWeeklyReport } from "./reports";
@@ -51,7 +52,24 @@ export function jobHandlers(): Record<string, JobHandler> {
       }
       await markPaid(db, payment.order_id, "paystack", reference, verified.amount, null, event.data);
     },
-    "ai.reply": async (p) => aiReply(db, s(p.conversationId)),
+    "ai.reply": async (p) => {
+      const conversationId = s(p.conversationId);
+      const lastHandled = await aiReply(db, conversationId);
+      // This job still holds the conversation's reply slot, so a message landing right now can't queue
+      // its own reply. A sweep shortly after picks it up.
+      if (lastHandled) {
+        await enqueue("ai.sweep", { conversationId, lastHandled }, { runAt: new Date(Date.now() + 15_000), dedupeKey: `slot:aisweep:${conversationId}` });
+      }
+    },
+    "ai.sweep": async (p) => {
+      const conversationId = s(p.conversationId);
+      if (await aiSweep(db, conversationId, s(p.lastHandled))) {
+        await enqueue("ai.reply", { conversationId }, { dedupeKey: `slot:ai:${conversationId}` });
+      }
+    },
+    "order.expire": async (p) => expireUnpaidOrder(db, s(p.orderId)),
+    "instagram.refresh_tokens": async () => { await refreshInstagramTokens(db); },
+    "maintenance.cleanup": async () => cleanup(db),
     "order.paid": async (p) => afterPaid(db, s(p.orderId)),
     "order.notify": async (p) => {
       const { data: o } = await db.from("orders").select("conversation_id").eq("id", s(p.orderId)).single();
@@ -70,6 +88,8 @@ export function jobHandlers(): Record<string, JobHandler> {
       const { data } = await db.from("vendors").select("id").eq("status", "live");
       const day = new Date().toISOString().slice(0, 10);
       for (const v of data ?? []) await enqueue("vendor.daily_summary", { vendorId: v.id }, { dedupeKey: `once:daily:${v.id}:${day}` });
+      await enqueue("instagram.refresh_tokens", {}, { dedupeKey: `once:igrefresh:${day}` });
+      await enqueue("maintenance.cleanup", {}, { dedupeKey: `once:cleanup:${day}` });
     },
     "cron.weekly": async () => {
       const { data } = await db.from("vendors").select("id").eq("status", "live");

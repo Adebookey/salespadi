@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { adminClient } from "./supabase/admin";
 import { enqueue, runJobs } from "./jobs";
 import { jobHandlers } from "./services/handlers";
+import { AI_REPLY_DELAY_MS } from "./jobs";
 
 export async function acceptWebhook(source: "whatsapp" | "instagram" | "paystack", rawBody: string, jobType: string) {
   const db = adminClient();
@@ -16,7 +17,20 @@ export async function acceptWebhook(source: "whatsapp" | "instagram" | "paystack
   if (error || !data) throw new Error(`store webhook: ${error?.message}`);
   await enqueue(jobType, { eventId: data.id });
   // Respond to Meta/Paystack immediately; process right after the response is sent.
-  after(() => runJobs(jobHandlers(), 10, 3).catch((e) => console.error("[after runJobs]", e)));
+  after(async () => {
+    try {
+      const handlers = jobHandlers();
+      await runJobs(handlers, 10, 3);
+      if (source !== "paystack") {
+        // The AI reply is queued a few seconds ahead so a burst of messages gets one answer. Wait for it
+        // here so the customer isn't left until the next scheduled worker run.
+        await new Promise((r) => setTimeout(r, AI_REPLY_DELAY_MS + 500));
+        await runJobs(handlers, 10, 3);
+      }
+    } catch (e) {
+      console.error("[after runJobs]", e);
+    }
+  });
 }
 
 export function isAuthorizedCron(req: Request) {

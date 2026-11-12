@@ -72,20 +72,63 @@ do $$ begin
 end $$;
 reset role;
 
--- mark_order_paid is idempotent and reduces stock once
+-- place_order reserves stock, numbers per vendor, and mark_order_paid is idempotent
 insert into product_variants (id, vendor_id, product_id, label, price_kobo, stock) values
   ('cccccccc-0000-0000-0000-000000000001', '11111111-0000-0000-0000-000000000001',
    'aaaaaaaa-0000-0000-0000-000000000001', 'Size 42', 2000000, 5);
-insert into orders (id, vendor_id, status, total_kobo) values
-  ('dddddddd-0000-0000-0000-000000000001', '11111111-0000-0000-0000-000000000001', 'awaiting_payment', 4000000);
-insert into order_items (vendor_id, order_id, product_id, variant_id, name, unit_price_kobo, quantity) values
-  ('11111111-0000-0000-0000-000000000001', 'dddddddd-0000-0000-0000-000000000001',
-   'aaaaaaaa-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001', 'A shoe', 2000000, 2);
-do $$ begin
-  assert public.mark_order_paid('dddddddd-0000-0000-0000-000000000001', 'paystack', 'ref-1', 4000000) = true, 'first pay';
-  assert public.mark_order_paid('dddddddd-0000-0000-0000-000000000001', 'paystack', 'ref-1', 4000000) = false, 'retry no-op';
-  assert (select stock from product_variants where id = 'cccccccc-0000-0000-0000-000000000001') = 3, 'stock reduced once';
+insert into delivery_zones (id, vendor_id, name, fee_kobo) values
+  ('eeeeeeee-0000-0000-0000-000000000001', '11111111-0000-0000-0000-000000000001', 'Mainland', 250000);
+do $$
+declare
+  o orders; o2 orders;
+  items jsonb := '[{"variant_id":"cccccccc-0000-0000-0000-000000000001","quantity":2}]';
+  v uuid := '11111111-0000-0000-0000-000000000001';
+  z uuid := 'eeeeeeee-0000-0000-0000-000000000001';
+begin
+  o := public.place_order(v, null, null, items, z, '1 Test St', 'Ada', '0801', null);
+  assert o.number = 1001, 'first order number per vendor';
+  assert o.total_kobo = 4250000, 'total = items + delivery';
+  assert (select stock from product_variants where id = 'cccccccc-0000-0000-0000-000000000001') = 3, 'stock reserved';
+
+  assert public.mark_order_paid(o.id, 'paystack', 'ref-1', 4250000) = true, 'first pay';
+  assert public.mark_order_paid(o.id, 'paystack', 'ref-1', 4250000) = false, 'retry no-op';
+  assert (select stock from product_variants where id = 'cccccccc-0000-0000-0000-000000000001') = 3, 'paying does not touch stock';
   assert (select count(*) from payments where reference = 'ref-1') = 1, 'one payment row';
+
+  o2 := public.place_order(v, null, null, items, z, '1 Test St', 'Ada', '0801', null);
+  assert o2.number = 1002, 'numbers count up per vendor';
+  begin
+    perform public.place_order(v, null, null, items, z, '1 Test St', 'Ada', '0801', null);
+    raise exception 'ordering more than stock should fail';
+  exception when raise_exception then
+    assert sqlerrm like 'Only 1 left%', sqlerrm;
+  end;
+  assert (select count(*) from orders where vendor_id = v) = 2, 'failed order left nothing behind';
+
+  update orders set status = 'cancelled' where id = o2.id;
+  assert (select stock from product_variants where id = 'cccccccc-0000-0000-0000-000000000001') = 3, 'cancel restores stock';
+
+  -- pay on delivery: paid while already out for delivery keeps the delivery status
+  o2 := public.place_order(v, null, null, items, z, '1 Test St', 'Ada', '0801', null);
+  update orders set status = 'out_for_delivery' where id = o2.id;
+  assert public.mark_order_paid(o2.id, 'cod', 'cod-1', 4250000) = true, 'cod paid';
+  assert (select status from orders where id = o2.id) = 'out_for_delivery', 'status kept';
+  assert (select paid_at from orders where id = o2.id) is not null, 'paid_at set';
+
+  -- another vendor starts its own numbering
+  insert into product_variants (id, vendor_id, product_id, label, price_kobo, stock) values
+    ('cccccccc-0000-0000-0000-000000000002', '22222222-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0000-000000000002', 'One size', 500000, 1);
+  insert into delivery_zones (id, vendor_id, name, fee_kobo) values
+    ('eeeeeeee-0000-0000-0000-000000000002', '22222222-0000-0000-0000-000000000002', 'Abuja', 100000);
+  o := public.place_order('22222222-0000-0000-0000-000000000002', null, null,
+    '[{"variant_id":"cccccccc-0000-0000-0000-000000000002","quantity":1}]', 'eeeeeeee-0000-0000-0000-000000000002', 'x', 'y', 'z', null);
+  assert o.number = 1001, 'vendor B numbering is separate';
+  begin
+    perform public.place_order('22222222-0000-0000-0000-000000000002', null, null, items, 'eeeeeeee-0000-0000-0000-000000000002', 'x', 'y', 'z', null);
+    raise exception 'cross-vendor variant should fail';
+  exception when raise_exception then
+    assert sqlerrm like 'Option % is not available', sqlerrm;
+  end;
 end $$;
 
 -- job queue

@@ -18,6 +18,7 @@ export default async function VendorOverview({ params }: { params: Promise<{ ven
     supabase.from("products").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId).eq("is_active", true),
     supabase.from("delivery_zones").select("id", { count: "exact", head: true }).eq("vendor_id", vendorId),
   ]);
+  const { data: canManage } = await supabase.rpc("is_vendor_owner", { v: vendorId });
   const t = (today.data ?? {}) as VendorStats;
   const w = (week.data ?? {}) as VendorStats;
   const base = `/dashboard/v/${vendorId}`;
@@ -45,9 +46,11 @@ export default async function VendorOverview({ params }: { params: Promise<{ ven
           </ul>
           <div className="mt-4 flex flex-wrap gap-2">
             <LinkButton variant="secondary" href={`${base}/studio`}>Test the AI first</LinkButton>
-            <form action={setVendorStatus.bind(null, vendorId, "live")}>
-              <Button disabled={!checklist.slice(0, 4).every((c) => c.done)}>Go live</Button>
-            </form>
+            {canManage && (
+              <form action={setVendorStatus.bind(null, vendorId, "live")}>
+                <Button disabled={!checklist.slice(0, 4).every((c) => c.done)}>Go live</Button>
+              </form>
+            )}
           </div>
         </Card>
       )}
@@ -83,9 +86,11 @@ export default async function VendorOverview({ params }: { params: Promise<{ ven
           <div>
             <h2 className="font-medium">AI assistant</h2>
             <p className="mt-1 text-sm text-gray-600">{vendor.ai_enabled ? "Replying to customers automatically." : "Paused: chats wait for a person."}</p>
-            <form action={toggleAI.bind(null, vendorId, !vendor.ai_enabled)} className="mt-3">
-              <Button variant={vendor.ai_enabled ? "secondary" : "primary"}>{vendor.ai_enabled ? "Pause AI" : "Resume AI"}</Button>
-            </form>
+            {canManage ? (
+              <form action={toggleAI.bind(null, vendorId, !vendor.ai_enabled)} className="mt-3">
+                <Button variant={vendor.ai_enabled ? "secondary" : "primary"}>{vendor.ai_enabled ? "Pause AI" : "Resume AI"}</Button>
+              </form>
+            ) : <p className="mt-2 text-xs text-gray-500">The shop owner can pause or resume it.</p>}
           </div>
           <div>
             <h2 className="font-medium">Channels</h2>
@@ -100,7 +105,7 @@ export default async function VendorOverview({ params }: { params: Promise<{ ven
               <ul className="mt-1 text-sm text-gray-600">{w.top_products.map((p) => <li key={p.name}>{p.name} · {p.qty} sold</li>)}</ul>
             </div>
           ) : null}
-          {vendor.status === "live" && (
+          {vendor.status === "live" && canManage && (
             <form action={setVendorStatus.bind(null, vendorId, "paused")}><Button variant="ghost" className="px-0 text-red-600">Pause this vendor</Button></form>
           )}
         </Card>

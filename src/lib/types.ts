@@ -23,6 +23,7 @@ export interface Vendor {
   bank_account_number: string | null;
   pay_on_delivery: boolean;
   low_stock_threshold: number;
+  ai_daily_budget_usd: number;
   setup_fee_kobo: number;
   monthly_fee_kobo: number;
   next_billing_date: string | null;
@@ -53,6 +54,7 @@ export interface Channel {
   waba_id: string | null;
   access_token_enc: string | null;
   status: "pending" | "active" | "disabled" | "error";
+  token_refreshed_at: string;
 }
 
 export interface Product {

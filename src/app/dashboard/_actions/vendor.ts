@@ -1,7 +1,8 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getSession, getVendorForUser, requireOperator } from "@/lib/auth";
+import { randomBytes } from "node:crypto";
+import { getVendorForUser, requireOperator } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase/admin";
 import { encrypt } from "@/lib/crypto";
 import { parseNairaToKobo } from "@/lib/money";
@@ -32,6 +33,22 @@ export async function createVendor(formData: FormData) {
   redirect(`/dashboard/v/${data.id}/setup`);
 }
 
+const OWNER_ONLY = "Only the shop owner can change this. Ask the owner or your SalesPadi manager.";
+
+/** Updates the vendor row as the signed-in user. Staff are blocked by the database, which reports no error, so we check a row actually changed. */
+async function updateVendor(
+  supabase: Awaited<ReturnType<typeof getVendorForUser>>["supabase"], vendorId: string, patch: Record<string, unknown>,
+): Promise<string | null> {
+  const { data, error } = await supabase.from("vendors").update(patch).eq("id", vendorId).select("id");
+  if (error) return error.message;
+  return data?.length ? null : OWNER_ONLY;
+}
+
+async function isOwner(supabase: Awaited<ReturnType<typeof getVendorForUser>>["supabase"], vendorId: string) {
+  const { data } = await supabase.rpc("is_vendor_owner", { v: vendorId });
+  return Boolean(data);
+}
+
 function done(vendorId: string, path = "") {
   revalidatePath(`/dashboard/v/${vendorId}${path}`, "layout");
   return { ok: true, message: "Saved" } as ActionState;
@@ -39,14 +56,14 @@ function done(vendorId: string, path = "") {
 
 export async function saveBusiness(vendorId: string, _: ActionState, f: FormData): Promise<ActionState> {
   const { supabase } = await getVendorForUser(vendorId);
-  const { error } = await supabase.from("vendors").update({
+  const error = await updateVendor(supabase, vendorId, {
     name: str(f, "name"),
     city: str(f, "city") || null,
     instagram_handle: str(f, "instagram_handle").replace(/^@/, "") || null,
     business_phone: phone(str(f, "business_phone")) || null,
     owner_whatsapp: phone(str(f, "owner_whatsapp")) || null,
-  }).eq("id", vendorId);
-  return error ? { error: error.message } : done(vendorId);
+  });
+  return error ? { error } : done(vendorId);
 }
 
 export async function saveVoice(vendorId: string, _: ActionState, f: FormData): Promise<ActionState> {
@@ -104,24 +121,35 @@ export async function savePayments(vendorId: string, _: ActionState, f: FormData
     if (!/^sk_(test|live)_/.test(key)) return { error: "That doesn't look like a Paystack secret key (sk_live_… or sk_test_…)." };
     patch.paystack_secret_enc = encrypt(key);
   }
-  const { error } = await supabase.from("vendors").update(patch).eq("id", vendorId);
+  const error = await updateVendor(supabase, vendorId, patch);
   if (!error && key) await audit(adminClient(), vendorId, "paystack_key_set");
-  return error ? { error: error.message } : done(vendorId);
+  return error ? { error } : done(vendorId);
 }
 
 export async function connectWhatsApp(vendorId: string, _: ActionState, f: FormData): Promise<ActionState> {
-  await getVendorForUser(vendorId);
+  const { supabase } = await getVendorForUser(vendorId);
+  if (!(await isOwner(supabase, vendorId))) return { error: OWNER_ONLY };
   const phoneNumberId = str(f, "phone_number_id");
+  const wabaId = str(f, "waba_id");
   const token = str(f, "access_token");
-  if (!phoneNumberId || !token) return { error: "Phone number ID and access token are required." };
+  if (!phoneNumberId || !wabaId || !token) return { error: "Phone number ID, WhatsApp Business Account ID and access token are all required." };
   const res = await fetch(`https://graph.facebook.com/${env.metaGraphVersion}/${phoneNumberId}?fields=display_phone_number,verified_name`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const info = await res.json().catch(() => ({}));
   if (!res.ok) return { error: `Meta rejected these details: ${info?.error?.message ?? res.status}` };
+  // Meta only delivers a number's messages to apps its WhatsApp Business Account is subscribed to.
+  const sub = await fetch(`https://graph.facebook.com/${env.metaGraphVersion}/${wabaId}/subscribed_apps`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!sub.ok) {
+    const body = await sub.json().catch(() => ({}));
+    return { error: `Couldn't subscribe this WhatsApp Business Account to the app, so no messages would arrive: ${body?.error?.message ?? sub.status}. Check the account ID and that the token has whatsapp_business_management permission.` };
+  }
   const { error } = await adminClient().from("channels").upsert({
-    vendor_id: vendorId, type: "whatsapp", external_id: phoneNumberId, waba_id: str(f, "waba_id") || null,
+    vendor_id: vendorId, type: "whatsapp", external_id: phoneNumberId, waba_id: wabaId,
     display_name: info.display_phone_number ?? null, access_token_enc: encrypt(token), status: "active",
+    token_refreshed_at: new Date().toISOString(),
   }, { onConflict: "type,external_id" });
   if (error) return { error: error.message };
   await audit(adminClient(), vendorId, "channel_connected", "whatsapp", phoneNumberId);
@@ -130,7 +158,8 @@ export async function connectWhatsApp(vendorId: string, _: ActionState, f: FormD
 }
 
 export async function connectInstagram(vendorId: string, _: ActionState, f: FormData): Promise<ActionState> {
-  await getVendorForUser(vendorId);
+  const { supabase } = await getVendorForUser(vendorId);
+  if (!(await isOwner(supabase, vendorId))) return { error: OWNER_ONLY };
   const token = str(f, "access_token");
   if (!token) return { error: "Access token is required." };
   const res = await fetch(`https://graph.instagram.com/${env.metaGraphVersion}/me?fields=user_id,username`, {
@@ -142,47 +171,55 @@ export async function connectInstagram(vendorId: string, _: ActionState, f: Form
   const { error } = await db.from("channels").upsert({
     vendor_id: vendorId, type: "instagram", external_id: String(info.user_id),
     display_name: `@${info.username}`, access_token_enc: encrypt(token), status: "active",
+    token_refreshed_at: new Date().toISOString(),
   }, { onConflict: "type,external_id" });
   if (error) return { error: error.message };
   // Subscribe the account to message and comment webhooks.
-  await fetch(`https://graph.instagram.com/${env.metaGraphVersion}/me/subscribed_apps?subscribed_fields=messages,comments`, {
+  const sub = await fetch(`https://graph.instagram.com/${env.metaGraphVersion}/me/subscribed_apps?subscribed_fields=messages,comments`, {
     method: "POST", headers: { Authorization: `Bearer ${token}` },
   }).catch(() => null);
+  const subscribed = Boolean(sub?.ok);
   await db.from("vendors").update({ instagram_handle: info.username }).eq("id", vendorId);
   await audit(db, vendorId, "channel_connected", "instagram", String(info.user_id));
   done(vendorId);
-  return { ok: true, message: `Connected @${info.username}` };
+  return subscribed
+    ? { ok: true, message: `Connected @${info.username}` }
+    : { error: `Saved @${info.username}, but Instagram refused the message subscription, so DMs won't arrive yet. Check the token has instagram_business_manage_messages, then connect again.` };
 }
 
 export async function disconnectChannel(vendorId: string, channelId: string) {
   const { supabase } = await getVendorForUser(vendorId);
+  if (!(await isOwner(supabase, vendorId))) return;
   await supabase.from("channels").update({ status: "disabled", access_token_enc: null }).eq("id", channelId).eq("vendor_id", vendorId);
   done(vendorId);
 }
 
 export async function setVendorStatus(vendorId: string, status: "onboarding" | "live" | "paused") {
   const { supabase } = await getVendorForUser(vendorId);
-  await supabase.from("vendors").update({ status }).eq("id", vendorId);
+  if (await updateVendor(supabase, vendorId, { status })) return;
   await audit(adminClient(), vendorId, "vendor_status", "vendor", vendorId, { status });
   done(vendorId);
 }
 
 export async function toggleAI(vendorId: string, enabled: boolean) {
   const { supabase } = await getVendorForUser(vendorId);
-  await supabase.from("vendors").update({ ai_enabled: enabled }).eq("id", vendorId);
+  await updateVendor(supabase, vendorId, { ai_enabled: enabled });
   done(vendorId);
 }
 
 export async function saveBilling(vendorId: string, _: ActionState, f: FormData): Promise<ActionState> {
   await requireOperator();
   const { supabase } = await getVendorForUser(vendorId);
-  const { error } = await supabase.from("vendors").update({
+  const budget = Number(str(f, "ai_daily_budget_usd") || 2);
+  if (!Number.isFinite(budget) || budget < 0) return { error: "Enter the AI budget in dollars per day, e.g. 2" };
+  const error = await updateVendor(supabase, vendorId, {
     setup_fee_kobo: parseNairaToKobo(str(f, "setup_fee") || "0") ?? 0,
     monthly_fee_kobo: parseNairaToKobo(str(f, "monthly_fee") || "0") ?? 0,
     next_billing_date: str(f, "next_billing_date") || null,
-  }).eq("id", vendorId);
+    ai_daily_budget_usd: budget,
+  });
   revalidatePath("/dashboard/billing");
-  return error ? { error: error.message } : done(vendorId);
+  return error ? { error } : done(vendorId);
 }
 
 export async function recordSubscriptionPayment(vendorId: string, _: ActionState, f: FormData): Promise<ActionState> {
@@ -204,34 +241,49 @@ export async function recordSubscriptionPayment(vendorId: string, _: ActionState
   return { ok: true, message: "Payment recorded" };
 }
 
+/**
+ * Adds a person to the shop. New people get an account with a one-time password that the inviter passes on
+ * (WhatsApp is fine); they change it under Account after signing in. No email has to arrive for this to work.
+ */
 export async function inviteMember(vendorId: string, _: ActionState, f: FormData): Promise<ActionState> {
   const { supabase } = await getVendorForUser(vendorId);
-  const { data: canManage } = await supabase.rpc("is_vendor_owner", { v: vendorId });
-  if (!canManage) return { error: "Only the shop owner can add people." };
+  if (!(await isOwner(supabase, vendorId))) return { error: "Only the shop owner can add people." };
   const email = str(f, "email").toLowerCase();
+  if (!/^\S+@\S+\.\S+$/.test(email)) return { error: "Enter a valid email address." };
   const role = str(f, "role") === "owner" ? "owner" : "staff";
   const db = adminClient();
-  let userId: string | undefined;
-  const invite = await db.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${env.appUrl}/auth/callback?next=/dashboard/v/${vendorId}`,
-    data: { full_name: str(f, "full_name") },
+
+  const tempPassword = randomBytes(9).toString("base64url");
+  const created = await db.auth.admin.createUser({
+    email, password: tempPassword, email_confirm: true, user_metadata: { full_name: str(f, "full_name") },
   });
-  if (invite.data.user) userId = invite.data.user.id;
-  else {
-    // Already registered: find them.
-    const { data: list } = await db.auth.admin.listUsers({ perPage: 1000 });
-    userId = list.users.find((u) => u.email?.toLowerCase() === email)?.id;
+  let userId = created.data.user?.id;
+  const isNew = Boolean(userId);
+  if (!userId) {
+    // Already has an account: look them up (pages of 200 until found).
+    for (let page = 1; page <= 25 && !userId; page++) {
+      const { data: list } = await db.auth.admin.listUsers({ page, perPage: 200 });
+      userId = list?.users.find((u) => u.email?.toLowerCase() === email)?.id;
+      if (!list?.users.length) break;
+    }
   }
-  if (!userId) return { error: invite.error?.message ?? "Could not invite that email" };
+  if (!userId) return { error: created.error?.message ?? "Could not add that email" };
+
   const { error } = await db.from("vendor_members").upsert({ vendor_id: vendorId, user_id: userId, role });
   if (error) return { error: error.message };
+  await audit(db, vendorId, "member_added", "user", userId, { role });
   done(vendorId, "/team");
-  return { ok: true, message: `${email} can now sign in to this shop.` };
+  return {
+    ok: true,
+    message: isNew
+      ? `${email} added. Send them this one-time password: ${tempPassword}  They sign in at ${env.appUrl}/login and should change it under Account. It won't be shown again.`
+      : `${email} already has a SalesPadi account and can now open this shop with their existing password.`,
+  };
 }
 
 export async function removeMember(vendorId: string, userId: string) {
-  const { supabase, user } = await getSession();
-  if (userId === user.id) return;
+  const { supabase, user } = await getVendorForUser(vendorId);
+  if (userId === user.id || !(await isOwner(supabase, vendorId))) return;
   await supabase.from("vendor_members").delete().eq("vendor_id", vendorId).eq("user_id", userId);
   done(vendorId, "/team");
 }

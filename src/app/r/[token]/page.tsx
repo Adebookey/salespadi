@@ -15,10 +15,16 @@ async function load(token: string) {
   return data as (Order & { items: OrderItem[]; vendor: { name: string } }) | null;
 }
 
+/** Riders handle paid orders, and pay-on-delivery orders that haven't been cancelled or delivered. */
+function riderCanUpdate(o: Order) {
+  if (["paid", "packed", "out_for_delivery"].includes(o.status)) return true;
+  return o.payment_method === "cod" && ["pending", "awaiting_payment"].includes(o.status);
+}
+
 async function update(token: string, status: "out_for_delivery" | "delivered") {
   "use server";
   const o = await load(token);
-  if (!o || !["paid", "packed", "out_for_delivery"].includes(o.status) && o.payment_method !== "cod") return;
+  if (!o || !riderCanUpdate(o)) return;
   await updateOrderStatus(adminClient(), o.id, status, null);
   revalidatePath(`/r/${token}`);
 }
@@ -39,7 +45,8 @@ export default async function RiderPage({ params }: { params: Promise<{ token: s
         </div>
         <ul className="text-sm text-gray-700">{o.items.map((i) => <li key={i.id}>{i.quantity} × {i.name}{i.variant_label ? ` (${i.variant_label})` : ""}</li>)}</ul>
         {o.payment_method === "cod" && !o.paid_at && <p className="rounded bg-amber-50 p-2 text-sm text-amber-800">Collect {formatNaira(o.total_kobo)} on delivery.</p>}
-        <div className="flex gap-2">
+        {!riderCanUpdate(o) && o.status !== "delivered" && <p className="rounded bg-gray-100 p-2 text-sm text-gray-700">This order is {o.status === "cancelled" ? "cancelled" : "not ready for delivery yet"}.</p>}
+        <div className={riderCanUpdate(o) ? "flex gap-2" : "hidden"}>
           {o.status !== "out_for_delivery" && o.status !== "delivered" && <form action={update.bind(null, token, "out_for_delivery")}><Button variant="secondary">I&apos;ve picked it up</Button></form>}
           {o.status !== "delivered" && <form action={update.bind(null, token, "delivered")}><Button>Delivered</Button></form>}
         </div>

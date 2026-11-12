@@ -3,6 +3,9 @@ import { env } from "@/lib/env";
 import { verifyHmac } from "@/lib/crypto";
 import { acceptWebhook } from "@/lib/webhooks";
 
+// Leaves time to send the AI reply after the response has gone back to Meta.
+export const maxDuration = 120;
+
 // Meta calls this once with a challenge when you save the webhook URL in the app dashboard.
 export async function GET(req: Request) {
   const url = new URL(req.url);

@@ -81,7 +81,10 @@ export async function feedbackRequest(db: SupabaseClient, orderId: string) {
     `How did you find your order #${o.number}? We'd love a quick rating from 1 to 5, and any comment. It really helps our small business. 🙏`);
 }
 
-/** Opt-in broadcasts. Inside the 24h window we send text; outside it we need the broadcast's approved template. */
+/**
+ * Opt-in broadcasts. Inside the 24h window we send text; outside it we need the broadcast's approved template.
+ * Each recipient is recorded before sending, so a retried or continued job never messages anyone twice.
+ */
 export async function sendBroadcast(db: SupabaseClient, broadcastId: string) {
   const { data: b } = await db.from("broadcasts").select("*").eq("id", broadcastId).single();
   if (!b || b.status === "sent") return;
@@ -89,8 +92,17 @@ export async function sendBroadcast(db: SupabaseClient, broadcastId: string) {
   const { data: convs } = await db.from("conversations")
     .select("id, last_inbound_at, channel_type, customer:customers!inner(opted_in_broadcast)")
     .eq("vendor_id", b.vendor_id).eq("customer.opted_in_broadcast", true);
-  let sent = 0;
+  const { data: done } = await db.from("broadcast_recipients").select("conversation_id").eq("broadcast_id", broadcastId);
+  const already = new Set((done ?? []).map((r) => r.conversation_id));
+  const deadline = Date.now() + 200_000;
+
   for (const c of convs ?? []) {
+    if (already.has(c.id)) continue;
+    if (Date.now() > deadline) {
+      // Big list: carry on in a fresh job rather than run out of time mid-send.
+      await enqueue("broadcast.send", { broadcastId });
+      return;
+    }
     const open = windowOpen(c.last_inbound_at);
     const msg = open
       ? ({ kind: "text", text: b.message } as const)
@@ -98,14 +110,16 @@ export async function sendBroadcast(db: SupabaseClient, broadcastId: string) {
         ? ({ kind: "template", name: b.template_name, params: [b.message] } as const)
         : null;
     if (!msg) continue;
+    const { error } = await db.from("broadcast_recipients").insert({ broadcast_id: broadcastId, conversation_id: c.id });
+    if (error) continue; // another run got to this customer first
     try {
       await sendToConversation(db, c.id, [msg], { sender: "system", aiMeta: { broadcast: broadcastId } });
-      sent++;
     } catch (e) {
       console.warn("[broadcast]", e instanceof Error ? e.message : e);
     }
   }
-  await db.from("broadcasts").update({ status: "sent", sent_count: sent }).eq("id", broadcastId);
+  const { count } = await db.from("broadcast_recipients").select("conversation_id", { count: "exact", head: true }).eq("broadcast_id", broadcastId);
+  await db.from("broadcasts").update({ status: "sent", sent_count: count ?? 0 }).eq("id", broadcastId);
 }
 
 const Extracted = z.object({

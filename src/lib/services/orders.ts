@@ -17,68 +17,41 @@ export async function createOrder(
   ctx: { vendorId: string; customerId: string | null; conversationId: string | null },
   input: NewOrderInput,
 ): Promise<OrderSummary> {
-  const ids = input.items.map((i) => i.variant_id);
-  const { data: variants, error } = await db
-    .from("product_variants")
-    .select("id, label, price_kobo, stock, product:products(id, name, is_active)")
-    .eq("vendor_id", ctx.vendorId)
-    .in("id", ids);
-  if (error) throw new Error(error.message);
-
-  const lines = input.items.map((i) => {
-    const v = variants?.find((x) => x.id === i.variant_id) as
-      | { id: string; label: string; price_kobo: number; stock: number; product: { id: string; name: string; is_active: boolean } }
-      | undefined;
-    if (!v || !v.product?.is_active) throw new Error(`Option ${i.variant_id} is not available`);
-    if (v.stock < i.quantity) throw new Error(`Only ${v.stock} left of ${v.product.name} (${v.label})`);
-    return { v, quantity: i.quantity };
+  // place_order checks and reserves stock, numbers the order and totals it in one transaction.
+  const { data, error } = await db.rpc("place_order", {
+    p_vendor: ctx.vendorId,
+    p_customer: ctx.customerId,
+    p_conversation: ctx.conversationId,
+    p_items: input.items,
+    p_zone: input.delivery_zone_id,
+    p_address: input.delivery_address,
+    p_name: input.customer_name,
+    p_phone: input.customer_phone,
+    p_notes: input.notes ?? null,
   });
-
-  const { data: zone } = await db
-    .from("delivery_zones").select("id, fee_kobo").eq("vendor_id", ctx.vendorId).eq("id", input.delivery_zone_id).single();
-  if (!zone) throw new Error("Unknown delivery zone");
-
-  const subtotal = lines.reduce((s, l) => s + l.v.price_kobo * l.quantity, 0);
-  const { data: order, error: oErr } = await db
-    .from("orders")
-    .insert({
-      vendor_id: ctx.vendorId,
-      customer_id: ctx.customerId,
-      conversation_id: ctx.conversationId,
-      status: "pending",
-      subtotal_kobo: subtotal,
-      delivery_fee_kobo: zone.fee_kobo,
-      total_kobo: subtotal + zone.fee_kobo,
-      delivery_zone_id: zone.id,
-      delivery_address: input.delivery_address,
-      customer_name: input.customer_name,
-      customer_phone: input.customer_phone,
-      notes: input.notes ?? null,
-    })
-    .select("*")
-    .single();
-  if (oErr || !order) throw new Error(`Could not create order: ${oErr?.message}`);
-
-  const items = lines.map((l) => ({
-    vendor_id: ctx.vendorId,
-    order_id: order.id,
-    product_id: l.v.product.id,
-    variant_id: l.v.id,
-    name: l.v.product.name,
-    variant_label: l.v.label,
-    unit_price_kobo: l.v.price_kobo,
-    quantity: l.quantity,
-  }));
-  const { error: iErr } = await db.from("order_items").insert(items);
-  if (iErr) throw new Error(iErr.message);
+  if (error || !data) throw new Error(error?.message ?? "Could not create order");
+  const order = data as Order;
+  const { data: items } = await db.from("order_items").select("name, variant_label, quantity").eq("order_id", order.id);
 
   await audit(db, ctx.vendorId, "order_created", "order", order.id, { number: order.number, total: order.total_kobo });
   await enqueue("sheet.sync", { orderId: order.id });
+  // Unpaid orders hold stock, so they are released after two days.
+  await enqueue("order.expire", { orderId: order.id }, { runAt: new Date(Date.now() + UNPAID_HOLD_HOURS * 3600_000), dedupeKey: `once:expire:${order.id}` });
   return {
     id: order.id, number: order.number, status: order.status, total_kobo: order.total_kobo,
-    payment_method: null, created_at: order.created_at,
-    items: items.map((i) => ({ name: i.name, variant_label: i.variant_label, quantity: i.quantity })),
+    payment_method: null, created_at: order.created_at, items: items ?? [],
   };
+}
+
+export const UNPAID_HOLD_HOURS = 48;
+
+/** Cancels an order nobody paid for, which puts its stock back on sale. Pay-on-delivery orders are left alone. */
+export async function expireUnpaidOrder(db: SupabaseClient, orderId: string) {
+  const { data: o } = await db.from("orders").select("status, payment_method, paid_at").eq("id", orderId).single();
+  if (!o || o.paid_at || o.payment_method === "cod" || !["pending", "awaiting_payment"].includes(o.status)) return;
+  const { data: proof } = await db.from("payments").select("id").eq("order_id", orderId).eq("method", "transfer").eq("status", "pending").limit(1);
+  if (proof?.length) return; // a transfer receipt is waiting for the vendor to confirm
+  await updateOrderStatus(db, orderId, "cancelled", null);
 }
 
 async function scheduleReminders(orderId: string) {
@@ -91,6 +64,7 @@ async function scheduleReminders(orderId: string) {
 export async function createPaymentLink(db: SupabaseClient, orderId: string): Promise<{ url: string } | { error: string }> {
   const { data: order } = await db.from("orders").select("*").eq("id", orderId).single<Order>();
   if (!order) return { error: "Order not found" };
+  if (order.paid_at) return { error: "Order is already paid" };
   if (!["pending", "awaiting_payment"].includes(order.status)) return { error: `Order is already ${order.status}` };
 
   const { data: existing } = await db
@@ -102,7 +76,7 @@ export async function createPaymentLink(db: SupabaseClient, orderId: string): Pr
   const key = paystackKey(vendor);
   if (!key) return { error: "Card payment is not set up for this business. Offer bank transfer instead." };
 
-  const reference = `SP${order.number}-${randomBytes(3).toString("hex")}`;
+  const reference = `SP${order.number}-${randomBytes(6).toString("hex")}`;
   const { authorization_url } = await initializeTransaction(key, {
     email: placeholderEmail(order.customer_phone || order.id),
     amountKobo: order.total_kobo,
@@ -174,12 +148,18 @@ const CUSTOMER_UPDATE: Partial<Record<OrderStatus, (o: Order) => string>> = {
 export async function updateOrderStatus(
   db: SupabaseClient, orderId: string, status: OrderStatus, actorId?: string | null,
 ) {
+  const { data: before } = await db.from("orders").select("*").eq("id", orderId).single<Order>();
+  if (!before) throw new Error("Order not found");
+  // Pay on delivery: delivered means the cash was collected.
+  if (status === "delivered" && !before.paid_at && before.payment_method === "cod") {
+    await markPaid(db, orderId, "cod", `COD-${orderId.slice(0, 8)}-${Date.now().toString(36)}`, before.total_kobo, actorId, { via: "delivered" });
+  }
   const patch: Record<string, unknown> = { status };
   if (status === "delivered") patch.delivered_at = new Date().toISOString();
   const { data: order, error } = await db.from("orders").update(patch).eq("id", orderId).select("*").single<Order>();
   if (error || !order) throw new Error(`Could not update order: ${error?.message}`);
   await audit(db, order.vendor_id, "order_status", "order", orderId, { status }, actorId);
-  const message = CUSTOMER_UPDATE[status]?.(order);
+  const message = before.status === status ? null : CUSTOMER_UPDATE[status]?.(order);
   if (message) await enqueue("order.notify", { orderId, text: message });
   if (status === "delivered") {
     // Feedback request the next day (inside the window if the customer replied to the delivery message).

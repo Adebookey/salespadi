@@ -20,6 +20,9 @@ Multi-tenant SaaS that runs AI sales assistants for Nigerian small businesses on
 - Job dedupe keys: `slot:` = one at a time (released on completion), `once:` = exactly once forever.
 - Keep the system prompt free of time-varying content (it is prompt-cached); the current time goes in the user turn.
 - Files with `"use server"` export only async functions.
+- Orders are created only through the `place_order` SQL function: it reserves stock and numbers orders per vendor. Paying does not touch stock; cancelling restores it (trigger). Unpaid non-COD orders auto-cancel after 48h (`order.expire`).
+- Updating the `vendors` row from the dashboard goes through `updateVendor()` in `_actions/vendor.ts`, which reports when RLS blocked a staff member instead of pretending it saved.
+- AI replies are guarded by a per-vendor daily budget (`vendors.ai_daily_budget_usd`) and a per-chat hourly cap; when hit, the chat is handed to a person.
 
 ## Checks
 - `npm run check` (typecheck, lint, vitest), `npm run test:db` (migrations + RLS on scratch Postgres), `npm run eval:agent` (needs ANTHROPIC_API_KEY), `npx next build`.

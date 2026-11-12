@@ -3,6 +3,9 @@ import { env, instagramAppSecret } from "@/lib/env";
 import { verifyHmac } from "@/lib/crypto";
 import { acceptWebhook } from "@/lib/webhooks";
 
+// Leaves time to send the AI reply after the response has gone back to Meta.
+export const maxDuration = 120;
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   if (url.searchParams.get("hub.mode") === "subscribe" && url.searchParams.get("hub.verify_token") === env.metaVerifyToken) {

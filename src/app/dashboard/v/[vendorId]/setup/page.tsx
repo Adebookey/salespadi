@@ -33,6 +33,7 @@ export default async function SetupPage({ params, searchParams }: {
     supabase.from("channels").select("id, type, display_name, external_id, status").eq("vendor_id", vendorId).neq("status", "disabled"),
   ]);
   const settings = s as VendorSettings;
+  const { data: canManage } = await supabase.rpc("is_vendor_owner", { v: vendorId });
   const idx = STEPS.findIndex((x) => x.id === step);
   const next = STEPS[idx + 1];
   const base = `/dashboard/v/${vendorId}/setup`;
@@ -51,6 +52,7 @@ export default async function SetupPage({ params, searchParams }: {
         {step === "business" && (
           <ActionForm action={saveBusiness.bind(null, vendorId)}>
             <h2 className="font-medium">Business info</h2>
+            {!canManage && <Notice tone="warn">Only the shop owner can change business info.</Notice>}
             <Field label="Business name"><Input name="name" defaultValue={vendor.name} required /></Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="City"><Input name="city" defaultValue={vendor.city ?? ""} /></Field>
@@ -134,6 +136,7 @@ export default async function SetupPage({ params, searchParams }: {
         {step === "payments" && (
           <ActionForm action={savePayments.bind(null, vendorId)}>
             <h2 className="font-medium">Payments and order sheet</h2>
+            {!canManage && <Notice tone="warn">Only the shop owner can change payment details.</Notice>}
             <p className="text-sm text-gray-600">Bank transfer: the customer sends a receipt screenshot, the vendor confirms with one tap.</p>
             <div className="grid gap-4 sm:grid-cols-3">
               <Field label="Bank"><Input name="bank_name" defaultValue={vendor.bank_name ?? ""} placeholder="GTBank" /></Field>
@@ -157,9 +160,10 @@ export default async function SetupPage({ params, searchParams }: {
         {step === "channels" && (
           <div className="space-y-6">
             <h2 className="font-medium">Channels</h2>
+            {!canManage && <Notice tone="warn">Only the shop owner can connect or disconnect channels.</Notice>}
             {(channels ?? []).map((c) => (
               <div key={c.id} className="flex items-center justify-between rounded-lg bg-brand-50 p-3 text-sm">
-                <span>✔ {c.type === "whatsapp" ? "WhatsApp" : "Instagram"} connected: <b>{c.display_name ?? c.external_id}</b></span>
+                <span>{c.status === "error" ? "⚠ " : "✔ "}{c.type === "whatsapp" ? "WhatsApp" : "Instagram"} {c.status === "error" ? "needs reconnecting (its access expired):" : "connected:"} <b>{c.display_name ?? c.external_id}</b></span>
                 <form action={disconnectChannel.bind(null, vendorId, c.id)}><Button variant="ghost" className="text-red-600">Disconnect</Button></form>
               </div>
             ))}
@@ -171,9 +175,9 @@ export default async function SetupPage({ params, searchParams }: {
               <h3 className="text-sm font-medium">WhatsApp Cloud API number</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Phone number ID"><Input name="phone_number_id" required /></Field>
-                <Field label="WhatsApp Business Account ID"><Input name="waba_id" /></Field>
+                <Field label="WhatsApp Business Account ID"><Input name="waba_id" required /></Field>
               </div>
-              <Field label="Access token" hint="A permanent System User token with whatsapp_business_messaging permission. Stored encrypted.">
+              <Field label="Access token" hint="A permanent System User token with whatsapp_business_messaging and whatsapp_business_management permissions. Stored encrypted.">
                 <Input name="access_token" type="password" required autoComplete="off" />
               </Field>
               <SubmitButton pendingText="Checking with Meta…">Connect WhatsApp</SubmitButton>

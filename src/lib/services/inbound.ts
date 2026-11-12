@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { InboundComment, InboundMessage, StatusUpdate } from "../channels/types";
 import { downloadWhatsAppMedia } from "../channels/whatsapp";
 import { getInstagramProfile, sendInstagramPrivateReply } from "../channels/instagram";
-import { enqueue } from "../jobs";
+import { AI_REPLY_DELAY_MS, enqueue } from "../jobs";
 import { env } from "../env";
 import type { Channel, Conversation, Customer, Vendor } from "../types";
 import { channelToken } from "./vendor";
@@ -114,7 +114,7 @@ export async function processInboundMessage(db: SupabaseClient, msg: InboundMess
   }
   if (vendor.ai_enabled && vendor.status === "live") {
     // Short delay so a burst of messages ("hi" / "do you have" / "size 42") gets one reply.
-    await enqueue("ai.reply", { conversationId: conversation.id }, { runAt: new Date(Date.now() + 4000), dedupeKey: `slot:ai:${conversation.id}` });
+    await enqueue("ai.reply", { conversationId: conversation.id }, { runAt: new Date(Date.now() + AI_REPLY_DELAY_MS), dedupeKey: `slot:ai:${conversation.id}` });
   } else {
     await db.from("conversations").update({ needs_attention: true }).eq("id", conversation.id);
   }

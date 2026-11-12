@@ -59,7 +59,7 @@ export async function handleVendorCommand(db: SupabaseClient, msg: InboundMessag
       const { data: payment } = await db.from("payments").select("*").eq("order_id", order.id).eq("method", "transfer")
         .eq("status", "pending").order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (cmd.toUpperCase() === "CONFIRM") {
-        const changed = await markPaid(db, order.id, "transfer", payment?.reference ?? `TRF${order.number}-manual`, order.total_kobo, null, { via: "whatsapp_command" });
+        const changed = await markPaid(db, order.id, "transfer", payment?.reference ?? `TRF${order.number}-${Date.now().toString(36)}`, order.total_kobo, null, { via: "whatsapp_command" });
         return reply(changed ? `Order #${order.number} marked paid (${formatNaira(order.total_kobo)}). The customer has been told.` : `Order #${order.number} is already ${order.status}.`);
       }
       if (payment) await db.from("payments").update({ status: "rejected" }).eq("id", payment.id);

@@ -97,3 +97,13 @@ export async function getInstagramProfile(accessToken: string, userId: string) {
   if (!res.ok) return null;
   return (await res.json()) as { name?: string; username?: string };
 }
+
+/** Extends a long-lived Instagram token for another 60 days. The token must be at least a day old. */
+export async function refreshInstagramToken(accessToken: string) {
+  const res = await fetch(
+    `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(accessToken)}`,
+  );
+  const json = (await res.json().catch(() => ({}))) as { access_token?: string; error?: { message?: string } };
+  if (!res.ok || !json.access_token) throw new Error(`Instagram token refresh failed (${res.status}): ${json.error?.message ?? "no token returned"}`);
+  return json.access_token;
+}

@@ -39,12 +39,13 @@ export default async function TeamPage({ params }: { params: Promise<{ vendorId:
           <Card>
             <h2 className="font-medium">Add someone</h2>
             <ActionForm action={inviteMember.bind(null, vendorId)} className="mt-3 space-y-3">
+              <p className="text-sm text-gray-600">You&apos;ll get a one-time password to pass on to them. They change it after signing in.</p>
               <Field label="Email"><Input name="email" type="email" required /></Field>
               <Field label="Name"><Input name="full_name" /></Field>
               <Field label="Role" hint="Owners can add or remove people. Staff can do everything else.">
                 <Select name="role" defaultValue="staff"><option value="staff">Staff</option><option value="owner">Owner</option></Select>
               </Field>
-              <SubmitButton>Send invite</SubmitButton>
+              <SubmitButton>Add person</SubmitButton>
             </ActionForm>
           </Card>
         )}
