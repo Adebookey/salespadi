@@ -23,12 +23,12 @@ export default async function GrowthPage({ params }: { params: Promise<{ vendorI
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <h2 className="font-medium">Instagram comment-to-DM</h2>
-          <p className="mt-1 text-sm text-gray-600">When someone comments the keyword on a post, they get this DM automatically and the AI takes it from there.</p>
+          <p className="mt-1 text-sm text-muted">When someone comments the keyword on a post, they get this DM automatically and the AI takes it from there.</p>
           <ul className="my-3 space-y-2">
             {(triggers ?? []).map((t) => (
-              <li key={t.id} className="flex items-start justify-between gap-2 rounded-lg bg-gray-50 p-2 text-sm">
-                <div><Badge colour="purple">{t.keyword}</Badge> <span className="text-gray-700">{t.reply_text}</span>{t.media_id && <div className="text-xs text-gray-500">Only post {t.media_id}</div>}</div>
-                <form action={deleteCommentTrigger.bind(null, vendorId, t.id)}><Button variant="ghost" className="text-red-600">Remove</Button></form>
+              <li key={t.id} className="flex items-start justify-between gap-2 rounded-lg bg-surface-2 p-2 text-sm">
+                <div><Badge colour="purple">{t.keyword}</Badge> <span className="text-muted">{t.reply_text}</span>{t.media_id && <div className="text-xs text-subtle">Only post {t.media_id}</div>}</div>
+                <form action={deleteCommentTrigger.bind(null, vendorId, t.id)}><Button variant="ghost" className="text-red-600 dark:text-red-400">Remove</Button></form>
               </li>
             ))}
           </ul>
@@ -44,30 +44,30 @@ export default async function GrowthPage({ params }: { params: Promise<{ vendorI
 
         <Card>
           <h2 className="font-medium">Broadcast to past customers</h2>
-          <p className="mt-1 text-sm text-gray-600">{optedIn ?? 0} customer(s) opted in. Customers who messaged in the last 24h get it as a normal message; on WhatsApp, others need an approved template.</p>
+          <p className="mt-1 text-sm text-muted">{optedIn ?? 0} customer(s) opted in. Customers who messaged in the last 24h get it as a normal message; on WhatsApp, others need an approved template.</p>
           <ActionForm action={createBroadcast.bind(null, vendorId)} className="mt-3 space-y-3">
             <Field label="Message"><Textarea name="message" rows={3} placeholder="New stock just landed! 🔥 Size 40-45 available. Reply to order." /></Field>
             <Field label="WhatsApp template name (optional)" hint="An approved marketing template with one body variable, used outside the 24h window."><Input name="template_name" /></Field>
             <SubmitButton>Send broadcast</SubmitButton>
           </ActionForm>
-          <ul className="mt-4 space-y-1 text-sm text-gray-600">
-            {(broadcasts ?? []).map((b) => <li key={b.id}>{lagosDateTime(b.created_at)} · {b.status} · {b.sent_count} sent · <span className="text-gray-500">{b.message.slice(0, 50)}</span></li>)}
+          <ul className="mt-4 space-y-1 text-sm text-muted">
+            {(broadcasts ?? []).map((b) => <li key={b.id}>{lagosDateTime(b.created_at)} · {b.status} · {b.sent_count} sent · <span className="text-subtle">{b.message.slice(0, 50)}</span></li>)}
           </ul>
         </Card>
 
         <Card>
           <h2 className="font-medium">Follow-ups</h2>
-          <p className="mt-1 text-sm text-gray-600">About 20 hours after someone asks but doesn&apos;t order, the assistant sends one friendly check-in (inside WhatsApp&apos;s 24-hour window). At most once a week per customer.</p>
+          <p className="mt-1 text-sm text-muted">About 20 hours after someone asks but doesn&apos;t order, the assistant sends one friendly check-in (inside WhatsApp&apos;s 24-hour window). At most once a week per customer.</p>
           <form action={setFollowups.bind(null, vendorId, !settings?.followup_enabled)} className="mt-3">
             <Button variant={settings?.followup_enabled ? "secondary" : "primary"}>{settings?.followup_enabled ? "Turn off follow-ups" : "Turn on follow-ups"}</Button>
           </form>
-          <p className="mt-4 text-sm text-gray-600">Also automatic: payment reminders for unpaid orders (2h and 20h), restock alerts to customers who asked for a sold-out item, and a feedback request after delivery.</p>
+          <p className="mt-4 text-sm text-muted">Also automatic: payment reminders for unpaid orders (2h and 20h), restock alerts to customers who asked for a sold-out item, and a feedback request after delivery.</p>
         </Card>
 
         <Card>
           <h2 className="font-medium">Weekly report</h2>
-          <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-gray-50 p-3 font-sans text-sm">{report}</pre>
-          <p className="mt-2 text-xs text-gray-500">Sent to the owner&apos;s WhatsApp every Monday morning.</p>
+          <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-surface-2 p-3 font-sans text-sm">{report}</pre>
+          <p className="mt-2 text-xs text-subtle">Sent to the owner&apos;s WhatsApp every Monday morning.</p>
           <ActionForm action={sendWeeklyReportNow.bind(null, vendorId)} className="mt-3">
             <SubmitButton variant="secondary" pendingText="Sending…">Send now</SubmitButton>
           </ActionForm>

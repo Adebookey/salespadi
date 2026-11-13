@@ -1,15 +1,19 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Bot, Check, CheckCheck, ChevronLeft, ChevronRight, Hand, Phone, X } from "lucide-react";
 import { getVendorForUser } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase/admin";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { ActionForm } from "@/components/action-form";
-import { SubmitButton } from "@/components/submit-button";
-import { Badge, Button, Card, Checkbox, Notice, OrderStatusBadge, Textarea, cn, lagosDateTime } from "@/components/ui";
+import { ChannelDot } from "@/components/channel-dot";
+import { Avatar, Button, Card, CardHeader, Notice, OrderStatusBadge, cn } from "@/components/ui";
 import { windowOpen } from "@/lib/services/messaging";
 import { formatNaira } from "@/lib/money";
 import type { Conversation, Customer, Message, Order } from "@/lib/types";
 import { markResolved, sendHumanReply, setConversationStatus } from "../../../../_actions/inbox";
+import { ReplyComposer } from "./reply-composer";
+
+const time = (iso: string) => new Date(iso).toLocaleTimeString("en-NG", { timeZone: "Africa/Lagos", hour: "2-digit", minute: "2-digit" });
+const day = (iso: string) => new Date(iso).toLocaleDateString("en-NG", { timeZone: "Africa/Lagos", weekday: "short", day: "numeric", month: "short" });
 
 export default async function ConversationPage({ params }: { params: Promise<{ vendorId: string; conversationId: string }> }) {
   const { vendorId, conversationId } = await params;
@@ -24,7 +28,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ v
   const messages = ((msgs ?? []) as Message[]).reverse();
 
   // Customer media is private: sign short-lived URLs for display.
-  const paths = messages.filter((m) => m.media_url && m.direction === "in").map((m) => m.media_url!) ;
+  const paths = messages.filter((m) => m.media_url && m.direction === "in").map((m) => m.media_url!);
   const signed = new Map<string, string>();
   if (paths.length) {
     const { data: urls } = await adminClient().storage.from("chat-media").createSignedUrls(paths, 3600);
@@ -32,77 +36,130 @@ export default async function ConversationPage({ params }: { params: Promise<{ v
   }
   const open = windowOpen(conv.last_inbound_at);
   const act = setConversationStatus.bind(null, vendorId, conversationId);
+  const name = conv.customer.name ?? conv.customer.phone ?? "Customer";
+  const base = `/dashboard/v/${vendorId}`;
+
+  const details = (
+    <>
+      <Card>
+        <CardHeader title="Customer" />
+        <dl className="space-y-2.5 text-sm">
+          {[["Name", conv.customer.name], ["Phone", conv.customer.phone], ["Address", conv.customer.address], ["Promos", conv.customer.opted_in_broadcast ? "Opted in" : "Not opted in"]].map(([k, v]) => (
+            <div key={k} className="flex justify-between gap-4"><dt className="text-subtle">{k}</dt><dd className="text-right text-fg">{v || "-"}</dd></div>
+          ))}
+        </dl>
+        {conv.customer.phone && (
+          <a href={`tel:+${conv.customer.phone.replace(/\D/g, "")}`} className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg text-sm font-medium text-fg ring-1 ring-inset ring-line-strong hover:bg-surface-2">
+            <Phone className="size-4" /> Call customer
+          </a>
+        )}
+      </Card>
+      <Card className="p-0 sm:p-0">
+        <h2 className="px-4 pb-1 pt-4 text-[15px] font-semibold text-fg sm:px-5">Orders</h2>
+        <ul className="divide-y divide-line">
+          {((orders ?? []) as Order[]).map((o) => (
+            <li key={o.id}>
+              <Link href={`${base}/orders/${o.id}`} className="flex items-center justify-between gap-2 px-4 py-3 text-sm hover:bg-surface-2 sm:px-5">
+                <span className="tabular text-fg">#{o.number} · {formatNaira(o.total_kobo)}</span><OrderStatusBadge status={o.status} />
+              </Link>
+            </li>
+          ))}
+          {!orders?.length && <li className="px-4 pb-4 text-sm text-muted sm:px-5">No orders yet.</li>}
+        </ul>
+      </Card>
+      {conv.summary && (
+        <Card><CardHeader title="AI notes" /><p className="whitespace-pre-wrap text-sm leading-relaxed text-muted">{conv.summary}</p></Card>
+      )}
+    </>
+  );
+
+  // Show a date divider wherever the day changes.
+  const dayLabels = messages.map((m, i) => {
+    const d = day(m.created_at);
+    return i === 0 || d !== day(messages[i - 1].created_at) ? d : null;
+  });
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
+    <div className="grid gap-5 lg:grid-cols-[1fr_320px] [&>*]:min-w-0">
       <AutoRefresh seconds={8} />
-      <Card className="flex min-h-[70vh] flex-col p-0">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 p-3">
-          <div>
-            <Link href={`/dashboard/v/${vendorId}/inbox`} className="text-xs text-gray-500">← Inbox</Link>
-            <div className="font-medium">{conv.customer.name ?? conv.customer.phone ?? "Customer"} <span className="text-xs text-gray-500">via {conv.channel_type === "whatsapp" ? "WhatsApp" : "Instagram"}</span></div>
+      <div className="-mx-4 flex flex-col sm:mx-0 sm:overflow-hidden sm:rounded-xl sm:border sm:border-line sm:shadow-card">
+        {/* Chat header */}
+        <div className="flex items-center gap-3 border-y border-line bg-surface px-3 py-2.5 sm:border-t-0 sm:px-4">
+          <Link href={`${base}/inbox`} className="-ml-1 inline-flex size-9 items-center justify-center rounded-lg text-muted hover:bg-surface-2" aria-label="Back to inbox">
+            <ChevronLeft className="size-5" />
+          </Link>
+          <span className="relative"><Avatar name={name.replace(/^@/, "")} className="size-10" /><ChannelDot type={conv.channel_type} /></span>
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-semibold text-fg">{name}</div>
+            <div className="flex items-center gap-1.5 text-xs text-subtle">
+              {conv.status === "ai" ? <><Bot className="size-3.5" /> AI is replying</> : conv.status === "human" ? <><Hand className="size-3.5" /> Team is replying</> : "Closed"}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {conv.status === "ai"
-              ? <form action={act.bind(null, "human")}><Button variant="secondary">Take over</Button></form>
-              : <form action={act.bind(null, "ai")}><Button>Hand back to AI</Button></form>}
-            {conv.needs_attention && <form action={markResolved.bind(null, vendorId, conversationId)}><Button variant="secondary">Mark handled</Button></form>}
-            <form action={act.bind(null, "closed")}><Button variant="ghost">Close</Button></form>
-          </div>
+          <form action={act.bind(null, "closed")}>
+            <button className="inline-flex size-9 items-center justify-center rounded-lg text-muted hover:bg-surface-2" aria-label="Close conversation" title="Close conversation"><X className="size-5" /></button>
+          </form>
         </div>
-        {conv.needs_attention && conv.handoff_reason && <div className="px-3 pt-3"><Notice tone="warn">AI handed off: {conv.handoff_reason}</Notice></div>}
-        <div className="flex flex-1 flex-col gap-2 overflow-y-auto bg-[#efeae2] p-3">
-          {messages.map((m) => (
-            <div key={m.id} className={cn("max-w-[85%] rounded-lg px-3 py-2 text-sm shadow-sm", m.direction === "in" ? "self-start bg-white" : m.sender === "human" ? "self-end bg-blue-100" : "self-end bg-[#d9fdd3]")}>
-              {m.media_url && m.type === "image" && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={m.direction === "in" ? signed.get(m.media_url) : m.media_url} alt="" className="mb-1 max-h-60 rounded" />
-              )}
-              {m.media_url && m.type === "audio" && m.direction === "in" && signed.get(m.media_url) && <audio controls src={signed.get(m.media_url)} className="mb-1 w-56" />}
-              <div className="whitespace-pre-wrap break-words">{m.content}</div>
-              <div className="mt-1 flex justify-end gap-1 text-[10px] text-gray-500">
-                {m.direction === "out" && <span>{m.sender === "ai" ? "AI" : m.sender === "human" ? "Team" : "Auto"}</span>}
-                <span>{lagosDateTime(m.created_at)}</span>
-                {m.status && m.direction === "out" && <span>· {m.status}</span>}
+
+        {/* Status bar */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-4 py-2.5">
+          {conv.needs_attention && conv.handoff_reason && (
+            <Notice tone="warn" className="w-full py-2">{conv.handoff_reason}</Notice>
+          )}
+          {conv.status === "ai"
+            ? <form action={act.bind(null, "human")} className="flex-1 sm:flex-none"><Button size="sm" variant="secondary" className="w-full"><Hand className="size-4" /> Take over</Button></form>
+            : <form action={act.bind(null, "ai")} className="flex-1 sm:flex-none"><Button size="sm" className="w-full"><Bot className="size-4" /> Hand back to AI</Button></form>}
+          {conv.needs_attention && (
+            <form action={markResolved.bind(null, vendorId, conversationId)} className="flex-1 sm:flex-none"><Button size="sm" variant="secondary" className="w-full"><Check className="size-4" /> Mark handled</Button></form>
+          )}
+        </div>
+
+        {/* Customer details on phones */}
+        <details className="group border-b border-line bg-surface lg:hidden">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-4 text-sm font-medium text-fg">
+            Customer & orders <ChevronRight className="size-4 text-subtle transition group-open:rotate-90" />
+          </summary>
+          <div className="space-y-4 bg-canvas p-4">{details}</div>
+        </details>
+
+        {/* Messages */}
+        <div className="flex min-h-[50vh] flex-1 flex-col gap-1.5 bg-chat px-3 py-4 sm:px-5">
+          {messages.map((m, i) => {
+            const d = dayLabels[i];
+            const out = m.direction === "out";
+            return (
+              <div key={m.id} className="contents">
+                {d && <div className="my-2 self-center rounded-md bg-surface/80 px-2.5 py-1 text-[11px] font-medium text-muted shadow-card">{d}</div>}
+                <div className={cn("max-w-[85%] rounded-2xl px-3 pb-1.5 pt-2 text-[15px] leading-snug text-fg shadow-card sm:max-w-[70%] sm:text-sm",
+                  out ? "self-end rounded-br-md" : "self-start rounded-bl-md bg-bubble-in",
+                  out && (m.sender === "human" ? "bg-bubble-team" : "bg-bubble-out"))}>
+                  {m.media_url && m.type === "image" && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={m.direction === "in" ? signed.get(m.media_url) : m.media_url} alt="" className="-mx-1 mb-1.5 max-h-64 w-[calc(100%+0.5rem)] rounded-xl object-cover" />
+                  )}
+                  {m.media_url && m.type === "audio" && m.direction === "in" && signed.get(m.media_url) && <audio controls src={signed.get(m.media_url)} className="mb-1 w-56 max-w-full" />}
+                  {m.content && <div className="whitespace-pre-wrap break-words">{m.content}</div>}
+                  <div className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-subtle">
+                    {out && <span className="mr-auto pr-3 font-medium">{m.sender === "ai" ? "AI" : m.sender === "human" ? "Team" : "Auto"}</span>}
+                    <span>{time(m.created_at)}</span>
+                    {out && m.status === "read" && <CheckCheck className="size-3.5 text-sky-500" />}
+                    {out && m.status === "delivered" && <CheckCheck className="size-3.5" />}
+                    {out && m.status === "sent" && <Check className="size-3.5" />}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
+          {messages.length === 0 && <p className="m-auto text-sm text-muted">No messages yet.</p>}
         </div>
-        <div className="border-t border-gray-100 p-3">
-          <ActionForm action={sendHumanReply.bind(null, vendorId, conversationId)} className="space-y-2">
-            {!open && <p className="text-xs text-amber-700">Last customer message was over 24 hours ago: {conv.channel_type === "whatsapp" ? "only a template message can be sent." : "Instagram won't deliver a new message until they write again."}</p>}
-            <Textarea name="text" rows={2} placeholder={conv.status === "ai" ? "Replying here takes over from the AI…" : "Type a reply…"} className="min-h-0" />
-            <div className="flex items-center justify-between gap-2">
-              {!open && conv.channel_type === "whatsapp" ? <Checkbox name="use_template" label="Send as template" defaultChecked /> : <span />}
-              <SubmitButton pendingText="Sending…">Send</SubmitButton>
-            </div>
-          </ActionForm>
+
+        {/* Composer: sits above the phone's bottom tab bar */}
+        <div className="sticky bottom-16 z-10 border-t border-line bg-surface/95 px-3 py-2.5 backdrop-blur-xl sm:px-4 md:bottom-0">
+          <ReplyComposer action={sendHumanReply.bind(null, vendorId, conversationId)}
+            placeholder={conv.status === "ai" ? "Reply (takes over from the AI)…" : "Type a reply…"}
+            windowClosed={!open} whatsapp={conv.channel_type === "whatsapp"} />
         </div>
-      </Card>
-      <div className="space-y-4">
-        <Card>
-          <h2 className="font-medium">Customer</h2>
-          <dl className="mt-2 space-y-1 text-sm">
-            <div><dt className="inline text-gray-500">Name: </dt><dd className="inline">{conv.customer.name ?? "-"}</dd></div>
-            <div><dt className="inline text-gray-500">Phone: </dt><dd className="inline">{conv.customer.phone ?? "-"}</dd></div>
-            <div><dt className="inline text-gray-500">Address: </dt><dd className="inline">{conv.customer.address ?? "-"}</dd></div>
-            <div><dt className="inline text-gray-500">Promos: </dt><dd className="inline">{conv.customer.opted_in_broadcast ? "Opted in" : "No"}</dd></div>
-          </dl>
-          <div className="mt-2"><Badge colour={conv.status === "ai" ? "green" : "blue"}>{conv.status === "ai" ? "AI replying" : conv.status === "human" ? "Team replying" : "Closed"}</Badge></div>
-        </Card>
-        <Card>
-          <h2 className="font-medium">Orders</h2>
-          <ul className="mt-2 space-y-2 text-sm">
-            {((orders ?? []) as Order[]).map((o) => (
-              <li key={o.id}><Link href={`/dashboard/v/${vendorId}/orders/${o.id}`} className="flex items-center justify-between gap-2">
-                <span>#{o.number} · {formatNaira(o.total_kobo)}</span><OrderStatusBadge status={o.status} />
-              </Link></li>
-            ))}
-            {!orders?.length && <li className="text-gray-500">No orders yet.</li>}
-          </ul>
-        </Card>
-        {conv.summary && <Card><h2 className="font-medium">AI notes</h2><p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">{conv.summary}</p></Card>}
       </div>
+      <div className="hidden space-y-5 lg:block">{details}</div>
     </div>
   );
 }

@@ -4,7 +4,8 @@ import { getVendorForUser } from "@/lib/auth";
 import { adminClient } from "@/lib/supabase/admin";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
-import { Badge, Button, Card, Field, Input, OrderStatusBadge, lagosDateTime } from "@/components/ui";
+import { Badge, Button, Card, CardHeader, Field, Input, OrderStatusBadge, lagosDateTime } from "@/components/ui";
+import { Check, ChevronLeft, Clock, Link2, MapPin, MessageCircle, Phone, StickyNote, UserRound } from "lucide-react";
 import { formatNaira } from "@/lib/money";
 import { env } from "@/lib/env";
 import type { Order, OrderItem, OrderStatus, Payment } from "@/lib/types";
@@ -40,95 +41,130 @@ export default async function OrderPage({ params }: { params: Promise<{ vendorId
     : (NEXT[o.status] ?? []);
   const setStatus = setOrderStatus.bind(null, vendorId, orderId);
 
+  const methodLabel = { paystack: "Card / bank (Paystack)", transfer: "Bank transfer", cod: "Pay on delivery" } as const;
+  const paymentStatusTone = { success: "green", pending: "amber", failed: "red", rejected: "red" } as const;
+  const primaryNext = next.filter((n) => n.to !== "cancelled");
+  const canCancel = next.some((n) => n.to === "cancelled");
+
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-      <div className="space-y-4">
-        <Card>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <Link href={`/dashboard/v/${vendorId}/orders`} className="text-xs text-gray-500">← Orders</Link>
-              <h2 className="text-lg font-semibold">Order #{o.number}</h2>
-              <div className="text-sm text-gray-500">{lagosDateTime(o.created_at)}</div>
-            </div>
+    <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+      <div className="space-y-5">
+        <div>
+          <Link href={`/dashboard/v/${vendorId}/orders`} className="-ml-1 mb-2 inline-flex items-center gap-0.5 text-sm text-muted hover:text-fg">
+            <ChevronLeft className="size-4" /> Orders
+          </Link>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h2 className="text-xl font-semibold tracking-tight text-fg">Order #{o.number}</h2>
             <OrderStatusBadge status={o.status} />
           </div>
-          <table className="mt-4 w-full text-sm">
-            <tbody className="divide-y divide-gray-100">
-              {o.items.map((i) => (
-                <tr key={i.id}><td className="py-2">{i.quantity} × {i.name}{i.variant_label ? <span className="text-gray-500"> ({i.variant_label})</span> : null}</td><td className="py-2 text-right">{formatNaira(i.unit_price_kobo * i.quantity)}</td></tr>
-              ))}
-              <tr><td className="py-2 text-gray-600">Delivery{o.zone ? ` (${o.zone.name})` : ""}</td><td className="py-2 text-right">{formatNaira(o.delivery_fee_kobo)}</td></tr>
-              <tr className="font-semibold"><td className="py-2">Total</td><td className="py-2 text-right">{formatNaira(o.total_kobo)}</td></tr>
-            </tbody>
-          </table>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {next.map((n) => (
-              <form key={n.to} action={setStatus.bind(null, n.to)}><Button variant={n.to === "cancelled" ? "ghost" : "primary"} className={n.to === "cancelled" ? "text-red-600" : ""}>{n.label}</Button></form>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-gray-500">The customer gets a WhatsApp/Instagram update at each step.</p>
-        </Card>
+          <p className="mt-1 text-sm text-subtle">Placed {lagosDateTime(o.created_at)}</p>
+        </div>
 
         <Card>
-          <h2 className="font-medium">Payment</h2>
-          <p className="mt-1 text-sm text-gray-600">Method: <span className="capitalize">{o.payment_method ?? "not chosen yet"}</span>{o.paid_at ? ` · paid ${lagosDateTime(o.paid_at)}` : ""}</p>
-          <ul className="mt-3 space-y-3">
-            {o.payments.map((p) => (
-              <li key={p.id} className="rounded-lg bg-gray-50 p-3 text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="capitalize">{p.method} · {formatNaira(p.amount_kobo)}</span>
-                  <Badge colour={p.status === "success" ? "green" : p.status === "pending" ? "amber" : "red"}>{p.status}</Badge>
+          <CardHeader title="Items" />
+          <ul className="divide-y divide-line">
+            {o.items.map((i) => (
+              <li key={i.id} className="flex items-start justify-between gap-4 py-3 first:pt-0">
+                <div className="min-w-0">
+                  <div className="text-[15px] text-fg sm:text-sm">{i.name}</div>
+                  <div className="text-xs text-subtle">{[i.variant_label, `Qty ${i.quantity}`].filter(Boolean).join(" · ")}</div>
                 </div>
-                <div className="text-xs text-gray-500">Ref {p.reference}</div>
-                {p.proof_url && signed.get(p.proof_url) && (
-                  <a href={signed.get(p.proof_url)} target="_blank" rel="noreferrer">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={signed.get(p.proof_url)} alt="Transfer receipt" className="mt-2 max-h-72 rounded ring-1 ring-gray-200" />
-                  </a>
-                )}
-                {p.method === "transfer" && p.status === "pending" && awaiting && (
-                  <div className="mt-2 flex gap-2">
-                    <form action={confirmTransfer.bind(null, vendorId, orderId, p.id)}><Button>Confirm payment received</Button></form>
-                    <form action={rejectTransfer.bind(null, vendorId, orderId, p.id)}><Button variant="secondary">Not received</Button></form>
-                  </div>
-                )}
+                <span className="tabular shrink-0 text-[15px] text-fg sm:text-sm">{formatNaira(i.unit_price_kobo * i.quantity)}</span>
               </li>
             ))}
           </ul>
-          {unpaid && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {awaiting && o.payment_method !== "cod" && (
-                <ActionForm action={sendPaymentLink.bind(null, vendorId, orderId)} className="space-y-2">
-                  <SubmitButton variant="secondary" pendingText="Sending…">Send Paystack link</SubmitButton>
-                </ActionForm>
+          <dl className="mt-3 space-y-2 border-t border-line pt-3 text-sm">
+            <div className="flex justify-between"><dt className="text-muted">Subtotal</dt><dd className="tabular text-fg">{formatNaira(o.subtotal_kobo)}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted">Delivery{o.zone ? ` · ${o.zone.name}` : ""}</dt><dd className="tabular text-fg">{formatNaira(o.delivery_fee_kobo)}</dd></div>
+            <div className="flex justify-between pt-1 text-base font-semibold"><dt className="text-fg">Total</dt><dd className="tabular text-fg">{formatNaira(o.total_kobo)}</dd></div>
+          </dl>
+          {(primaryNext.length > 0 || canCancel) && (
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+              {primaryNext.map((n, idx) => (
+                <form key={n.to} action={setStatus.bind(null, n.to)} className="sm:flex-none">
+                  <Button className="w-full" variant={idx === 0 ? "primary" : "secondary"}>{n.label}</Button>
+                </form>
+              ))}
+              {canCancel && (
+                <form action={setStatus.bind(null, "cancelled")} className="sm:ml-auto">
+                  <Button className="w-full" variant="danger-ghost">Cancel order</Button>
+                </form>
               )}
-              {!pendingTransfer && <form action={confirmTransfer.bind(null, vendorId, orderId, null)}><Button variant="secondary">{o.payment_method === "cod" ? "Cash collected (mark paid)" : "Mark paid manually"}</Button></form>}
             </div>
           )}
-          {awaiting && o.payment_method !== "cod" && <p className="mt-2 text-xs text-gray-500">The items are held for this customer. If it isn&apos;t paid within 48 hours the order is cancelled and the stock goes back on sale.</p>}
+          <p className="mt-3 text-xs text-subtle">The customer gets a WhatsApp or Instagram update at each step.</p>
+        </Card>
+
+        <Card>
+          <CardHeader title="Payment"
+            description={<>{o.payment_method ? methodLabel[o.payment_method] : "Not chosen yet"}{o.paid_at ? ` · paid ${lagosDateTime(o.paid_at)}` : ""}</>} />
+          {o.payments.length > 0 && (
+            <ul className="space-y-3">
+              {o.payments.map((p) => (
+                <li key={p.id} className="rounded-xl border border-line bg-surface-2/60 p-3.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="tabular text-sm font-medium text-fg">{methodLabel[p.method]} · {formatNaira(p.amount_kobo)}</span>
+                    <Badge colour={paymentStatusTone[p.status]}>{p.status === "pending" && p.proof_url ? "Receipt sent" : p.status[0].toUpperCase() + p.status.slice(1)}</Badge>
+                  </div>
+                  <div className="mt-0.5 truncate text-xs text-subtle">Ref {p.reference}</div>
+                  {p.proof_url && signed.get(p.proof_url) && (
+                    <a href={signed.get(p.proof_url)} target="_blank" rel="noreferrer" className="mt-3 block">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={signed.get(p.proof_url)} alt="Transfer receipt" className="max-h-80 w-full rounded-lg object-contain ring-1 ring-line sm:w-auto" />
+                    </a>
+                  )}
+                  {p.method === "transfer" && p.status === "pending" && awaiting && (
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <form action={confirmTransfer.bind(null, vendorId, orderId, p.id)}><Button className="w-full"><Check className="size-4" /> Payment received</Button></form>
+                      <form action={rejectTransfer.bind(null, vendorId, orderId, p.id)}><Button className="w-full" variant="secondary">Not received</Button></form>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {unpaid && (
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              {awaiting && o.payment_method !== "cod" && (
+                <ActionForm action={sendPaymentLink.bind(null, vendorId, orderId)} className="space-y-2">
+                  <SubmitButton className="w-full" variant="secondary" pendingText="Sending…"><Link2 className="size-4" /> Send Paystack link</SubmitButton>
+                </ActionForm>
+              )}
+              {!pendingTransfer && (
+                <form action={confirmTransfer.bind(null, vendorId, orderId, null)}>
+                  <Button className="w-full" variant="secondary">{o.payment_method === "cod" ? "Cash collected" : "Mark paid manually"}</Button>
+                </form>
+              )}
+            </div>
+          )}
+          {awaiting && o.payment_method !== "cod" && (
+            <p className="mt-3 flex gap-2 text-xs leading-relaxed text-subtle"><Clock className="mt-px size-3.5 shrink-0" />The items are held for 48 hours. If unpaid by then, the order is cancelled and the stock goes back on sale.</p>
+          )}
         </Card>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-5 lg:pt-[76px]">
         <Card>
-          <h2 className="font-medium">Delivery</h2>
-          <dl className="mt-2 space-y-1 text-sm">
-            <div><dt className="inline text-gray-500">Name: </dt><dd className="inline">{o.customer_name}</dd></div>
-            <div><dt className="inline text-gray-500">Phone: </dt><dd className="inline">{o.customer_phone ? <a className="text-brand-700" href={`tel:${o.customer_phone}`}>{o.customer_phone}</a> : "-"}</dd></div>
-            <div><dt className="inline text-gray-500">Address: </dt><dd className="inline">{o.delivery_address}</dd></div>
-            {o.notes && <div><dt className="inline text-gray-500">Notes: </dt><dd className="inline">{o.notes}</dd></div>}
-          </dl>
+          <CardHeader title="Delivery" />
+          <div className="space-y-3 text-sm">
+            <div className="flex items-start gap-3"><UserRound className="mt-0.5 size-4 shrink-0 text-subtle" /><span className="text-fg">{o.customer_name ?? "-"}</span></div>
+            <div className="flex items-start gap-3"><MapPin className="mt-0.5 size-4 shrink-0 text-subtle" /><span className="text-fg">{o.delivery_address ?? "-"}</span></div>
+            {o.notes && <div className="flex items-start gap-3"><StickyNote className="mt-0.5 size-4 shrink-0 text-subtle" /><span className="text-muted">{o.notes}</span></div>}
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            {o.customer_phone && <a href={`tel:${o.customer_phone}`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg text-sm font-medium text-fg ring-1 ring-inset ring-line-strong hover:bg-surface-2"><Phone className="size-4" /> Call</a>}
+            {o.conversation_id && <Link href={`/dashboard/v/${vendorId}/inbox/${o.conversation_id}`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg text-sm font-medium text-fg ring-1 ring-inset ring-line-strong hover:bg-surface-2"><MessageCircle className="size-4" /> Chat</Link>}
+          </div>
         </Card>
         <Card>
-          <h2 className="font-medium">Rider</h2>
-          <ActionForm action={assignRider.bind(null, vendorId, orderId)} className="mt-2 space-y-3">
+          <CardHeader title="Rider" description="The rider marks the order picked up and delivered from a link, no login needed." />
+          <ActionForm action={assignRider.bind(null, vendorId, orderId)} className="space-y-3">
             <Field label="Rider name"><Input name="rider_name" defaultValue={o.rider_name ?? ""} /></Field>
-            <Field label="Rider phone"><Input name="rider_phone" defaultValue={o.rider_phone ?? ""} /></Field>
-            <SubmitButton variant="secondary">Save rider</SubmitButton>
+            <Field label="Rider phone"><Input name="rider_phone" type="tel" defaultValue={o.rider_phone ?? ""} /></Field>
+            <SubmitButton className="w-full" variant="secondary">Save rider</SubmitButton>
           </ActionForm>
-          <p className="mt-3 break-all text-xs text-gray-500">Rider link: {env.appUrl}/r/{o.rider_token}</p>
+          <p className="mt-3 break-all rounded-lg bg-surface-2 px-3 py-2 font-mono text-xs text-muted">{env.appUrl}/r/{o.rider_token}</p>
         </Card>
-        {o.conversation_id && <Link href={`/dashboard/v/${vendorId}/inbox/${o.conversation_id}`} className="block text-sm text-brand-700">Open the chat →</Link>}
       </div>
     </div>
   );

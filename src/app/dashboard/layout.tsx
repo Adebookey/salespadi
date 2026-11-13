@@ -1,39 +1,26 @@
-import Link from "next/link";
 import { getSession } from "@/lib/auth";
+import { getTheme } from "@/lib/theme-server";
+import { AppHeader, type HeaderLink } from "@/components/app-header";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { isOperator, user, profile } = await getSession();
-  const links = isOperator
-    ? [
-        { href: "/dashboard", label: "Vendors" },
-        { href: "/dashboard/escalations", label: "Escalations" },
-        { href: "/dashboard/usage", label: "AI costs" },
-        { href: "/dashboard/billing", label: "Billing" },
-      ]
-    : [{ href: "/dashboard", label: "My shop" }];
+  const { isOperator, user, profile, supabase } = await getSession();
+  const theme = await getTheme();
+  let links: HeaderLink[] = [{ href: "/dashboard", label: "My shop", icon: "shop" }];
+  if (isOperator) {
+    const { count } = await supabase.from("conversations").select("id", { count: "exact", head: true }).eq("needs_attention", true);
+    links = [
+      { href: "/dashboard", label: "Vendors", icon: "vendors" },
+      { href: "/dashboard/escalations", label: "Escalations", icon: "escalations", badge: count ?? 0 },
+      { href: "/dashboard/usage", label: "AI costs", icon: "usage" },
+      { href: "/dashboard/billing", label: "Billing", icon: "billing" },
+    ];
+  }
+  const name = profile?.full_name || user.email?.split("@")[0] || "Account";
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
-          <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
-            <span className="flex size-7 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">S</span>
-            <span className="hidden sm:inline">SalesPadi</span>
-          </Link>
-          <nav className="flex flex-1 gap-1 overflow-x-auto text-sm">
-            {links.map((l) => (
-              <Link key={l.href} href={l.href} className="whitespace-nowrap rounded-md px-2.5 py-1.5 text-gray-700 hover:bg-gray-100">
-                {l.label}
-              </Link>
-            ))}
-          </nav>
-          <form action="/auth/signout" method="post" className="flex items-center gap-3">
-            <Link href="/dashboard/account" className="text-xs text-gray-500 hover:text-gray-900">{profile?.full_name || user.email}</Link>
-            <button className="text-sm text-gray-600 hover:text-gray-900">Sign out</button>
-          </form>
-        </div>
-      </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
+      <AppHeader links={links} name={name} email={user.email ?? ""} theme={theme} />
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-10 pt-5 sm:pt-8">{children}</main>
     </div>
   );
 }

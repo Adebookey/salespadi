@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ChevronLeft } from "lucide-react";
 import { getVendorForUser } from "@/lib/auth";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
@@ -18,7 +20,12 @@ export default async function ProductPage({ params }: { params: Promise<{ vendor
   const images = [...p.images].sort((a, b) => a.position - b.position);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <>
+    <Link href={`/dashboard/v/${vendorId}/catalog`} className="-ml-1 mb-2 inline-flex items-center gap-0.5 text-sm text-muted hover:text-fg">
+      <ChevronLeft className="size-4" /> Catalog
+    </Link>
+    <h2 className="mb-4 text-xl font-semibold tracking-tight text-fg">{p.name}</h2>
+    <div className="grid gap-5 lg:grid-cols-2">
       <Card>
         <ActionForm action={updateProduct.bind(null, vendorId, productId)}>
           <h2 className="font-medium">Product</h2>
@@ -31,15 +38,15 @@ export default async function ProductPage({ params }: { params: Promise<{ vendor
           <Checkbox name="is_active" label="Visible to the AI (on sale)" defaultChecked={p.is_active} />
           <SubmitButton>Save product</SubmitButton>
         </ActionForm>
-        <div className="mt-6 border-t border-gray-100 pt-4">
+        <div className="mt-6 border-t border-line pt-4">
           <h2 className="mb-3 font-medium">Photos</h2>
           <div className="mb-3 grid grid-cols-3 gap-2">
             {images.map((img) => (
-              <div key={img.id} className="group relative aspect-square overflow-hidden rounded-lg bg-gray-100">
+              <div key={img.id} className="group relative aspect-square overflow-hidden rounded-lg bg-surface-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={img.url} alt="" className="size-full object-cover" />
                 <form action={removeProductImage.bind(null, vendorId, img.id)} className="absolute right-1 top-1">
-                  <button className="rounded bg-white/90 px-1.5 text-xs text-red-600 shadow">Remove</button>
+                  <button className="rounded bg-surface/90 px-1.5 text-xs text-red-600 dark:text-red-400 shadow">Remove</button>
                 </form>
               </div>
             ))}
@@ -52,18 +59,18 @@ export default async function ProductPage({ params }: { params: Promise<{ vendor
           <h2 className="font-medium">Options, prices and stock</h2>
           <div className="space-y-3">
             {variants.map((v) => (
-              <div key={v.id} className="grid grid-cols-[1fr_6rem_4.5rem] items-end gap-2 rounded-lg bg-gray-50 p-2 sm:grid-cols-[1fr_5rem_5rem_6rem_4.5rem_auto]">
+              <div key={v.id} className="grid grid-cols-[1fr_6rem_4.5rem] items-end gap-2 rounded-lg bg-surface-2 p-2 sm:grid-cols-[1fr_5rem_5rem_6rem_4.5rem_auto]">
                 <input type="hidden" name="variant_id" value={v.id} />
                 <Field label="Option"><Input name={`label_${v.id}`} defaultValue={v.label} /></Field>
                 <div className="hidden sm:block"><Field label="Size"><Input name={`size_${v.id}`} defaultValue={v.size ?? ""} /></Field></div>
                 <div className="hidden sm:block"><Field label="Colour"><Input name={`colour_${v.id}`} defaultValue={v.colour ?? ""} /></Field></div>
                 <Field label="Price ₦"><Input name={`price_${v.id}`} defaultValue={String(v.price_kobo / 100)} inputMode="decimal" /></Field>
                 <Field label="Stock"><Input name={`stock_${v.id}`} type="number" min={0} defaultValue={v.stock} /></Field>
-                <label className="col-span-3 flex items-center gap-1 pb-2 text-xs text-gray-500 sm:col-span-1"><input type="checkbox" name={`delete_${v.id}`} /> Delete</label>
+                <label className="col-span-3 flex items-center gap-1 pb-2 text-xs text-subtle sm:col-span-1"><input type="checkbox" name={`delete_${v.id}`} /> Delete</label>
               </div>
             ))}
           </div>
-          <div className="rounded-lg border border-dashed border-gray-300 p-3">
+          <div className="rounded-lg border border-dashed border-line-strong p-3">
             <div className="mb-2 text-sm font-medium">Add an option</div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
               <Input name="new_label" placeholder="Size 44" />
@@ -75,10 +82,11 @@ export default async function ProductPage({ params }: { params: Promise<{ vendor
           </div>
           <SubmitButton>Save options</SubmitButton>
         </ActionForm>
-        <form action={deleteProduct.bind(null, vendorId, productId)} className="mt-6 border-t border-gray-100 pt-4">
-          <Button variant="ghost" className="px-0 text-red-600">Delete this product</Button>
+        <form action={deleteProduct.bind(null, vendorId, productId)} className="mt-6 border-t border-line pt-4">
+          <Button variant="danger-ghost" className="w-full sm:w-auto">Delete this product</Button>
         </form>
       </Card>
     </div>
+    </>
   );
 }

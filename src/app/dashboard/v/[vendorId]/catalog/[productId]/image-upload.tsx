@@ -32,7 +32,7 @@ export function ImageUpload({ vendorId, productId }: { vendorId: string; product
       <Button type="button" variant="secondary" disabled={pending} onClick={() => input.current?.click()}>
         {pending ? "Uploading…" : "Add photos"}
       </Button>
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
     </div>
   );
 }

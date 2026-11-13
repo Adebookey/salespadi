@@ -5,7 +5,10 @@
 Multi-tenant SaaS that runs AI sales assistants for Nigerian small businesses on WhatsApp and Instagram. The operator (a solo developer) onboards vendors; the system answers their customers, takes orders, confirms payments and follows up. See README.md for setup.
 
 ## Stack
-- Next.js 16 App Router, TypeScript strict, Tailwind v4, hand-rolled UI kit in `src/components/ui.tsx`. Mobile-first.
+- Next.js 16 App Router, TypeScript strict, Tailwind v4, hand-rolled UI kit in `src/components/ui.tsx`, icons from `lucide-react`. Mobile-first.
+- Theming: dark by default, light via the `theme` cookie (read server-side in the root layout, so no flash). Use the semantic colour tokens from `globals.css` (`bg-canvas`, `bg-surface`, `bg-surface-2`, `text-fg`, `text-muted`, `text-subtle`, `border-line`, `bg-accent`, `text-accent-text`, chat `bg-chat`/`bg-bubble-*`), never raw greys or `bg-white`. Coloured states use `Badge`/`Notice` tones, which include their `dark:` variants.
+- Phones: shop pages use a fixed bottom tab bar (`VendorNav`), so keep page content clear of it (the vendor layout pads it) and put sticky composers at `bottom-16 md:bottom-0`. Pop-ups go through `Sheet`, which portals to `<body>`. Inputs are 16px on phones so iOS doesn't zoom; buttons are 44px tall on phones.
+- `cn()` uses tailwind-merge, so later classes override earlier conflicting ones.
 - `proxy.ts` (not middleware) refreshes the Supabase session. Request APIs (`params`, `searchParams`, `cookies`) are async.
 - Supabase Postgres/Auth/Storage. RLS on every tenant table via `can_access_vendor(vendor_id)`; operators (`profiles.is_operator`) see all.
 - Background work: `jobs` table + `claim_jobs()`; `/api/worker` runs handlers from `src/lib/services/handlers.ts`. Webhooks only store + enqueue + `after()`.

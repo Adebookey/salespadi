@@ -21,14 +21,14 @@ export default async function TeamPage({ params }: { params: Promise<{ vendorId:
       <PageHeader title="Team" description="People who can sign in to see this shop's chats, orders and stock." />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-line">
             {(members ?? []).map((m) => (
               <li key={m.user_id} className="flex items-center justify-between gap-2 py-2.5 text-sm">
-                <span>{emails.get(m.user_id) ?? m.user_id}{m.user_id === user.id && <span className="text-gray-500"> (you)</span>}</span>
+                <span>{emails.get(m.user_id) ?? m.user_id}{m.user_id === user.id && <span className="text-subtle"> (you)</span>}</span>
                 <span className="flex items-center gap-2">
                   <Badge colour={m.role === "operator" ? "purple" : m.role === "owner" ? "green" : "gray"}>{m.role}</Badge>
                   {canManage && m.user_id !== user.id && (
-                    <form action={removeMember.bind(null, vendorId, m.user_id)}><Button variant="ghost" className="text-red-600">Remove</Button></form>
+                    <form action={removeMember.bind(null, vendorId, m.user_id)}><Button variant="ghost" className="text-red-600 dark:text-red-400">Remove</Button></form>
                   )}
                 </span>
               </li>
@@ -39,7 +39,7 @@ export default async function TeamPage({ params }: { params: Promise<{ vendorId:
           <Card>
             <h2 className="font-medium">Add someone</h2>
             <ActionForm action={inviteMember.bind(null, vendorId)} className="mt-3 space-y-3">
-              <p className="text-sm text-gray-600">You&apos;ll get a one-time password to pass on to them. They change it after signing in.</p>
+              <p className="text-sm text-muted">You&apos;ll get a one-time password to pass on to them. They change it after signing in.</p>
               <Field label="Email"><Input name="email" type="email" required /></Field>
               <Field label="Name"><Input name="full_name" /></Field>
               <Field label="Role" hint="Owners can add or remove people. Staff can do everything else.">

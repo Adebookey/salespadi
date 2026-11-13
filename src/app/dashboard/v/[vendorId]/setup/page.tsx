@@ -39,14 +39,20 @@ export default async function SetupPage({ params, searchParams }: {
   const base = `/dashboard/v/${vendorId}/setup`;
 
   return (
-    <div className="grid gap-6 md:grid-cols-[200px_1fr]">
-      <nav className="flex gap-1 overflow-x-auto md:flex-col">
-        {STEPS.map((x) => (
-          <Link key={x.id} href={`${base}?step=${x.id}`}
-            className={cn("whitespace-nowrap rounded-lg px-3 py-2 text-sm", x.id === step ? "bg-brand-50 font-medium text-brand-700" : "text-gray-600 hover:bg-gray-100")}>
-            {x.label}
-          </Link>
-        ))}
+    <div className="grid gap-5 md:grid-cols-[210px_1fr] md:gap-6 [&>*]:min-w-0">
+      <nav className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-col md:gap-0.5 md:px-0" aria-label="Setup steps">
+        {STEPS.map((x, i) => {
+          const current = x.id === step;
+          return (
+            <Link key={x.id} href={`${base}?step=${x.id}`} aria-current={current ? "step" : undefined}
+              className={cn("inline-flex min-h-9 shrink-0 items-center gap-2.5 rounded-full px-3.5 text-sm transition md:min-h-10 md:rounded-lg md:px-3",
+                current ? "bg-fg font-medium text-canvas md:bg-accent-soft md:text-accent-text" : "bg-surface text-muted ring-1 ring-inset ring-line hover:text-fg md:bg-transparent md:ring-0 md:hover:bg-surface-2")}>
+              <span className={cn("tabular hidden size-6 items-center justify-center rounded-full text-xs font-semibold md:inline-flex",
+                current ? "bg-accent text-accent-fg" : "bg-surface-3 text-muted")}>{i + 1}</span>
+              {x.label.replace(/^\d\. /, "")}
+            </Link>
+          );
+        })}
       </nav>
       <Card>
         {step === "business" && (
@@ -107,17 +113,17 @@ export default async function SetupPage({ params, searchParams }: {
         {step === "delivery" && (
           <div className="space-y-5">
             <h2 className="font-medium">Delivery zones</h2>
-            <ul className="divide-y divide-gray-100 rounded-lg ring-1 ring-gray-200">
+            <ul className="divide-y divide-line rounded-lg ring-1 ring-line">
               {((zones ?? []) as DeliveryZone[]).map((z) => (
                 <li key={z.id} className="flex items-start justify-between gap-3 p-3 text-sm">
                   <div>
                     <div className="font-medium">{z.name} · {formatNaira(z.fee_kobo)}{z.eta ? ` · ${z.eta}` : ""}</div>
-                    <div className="text-gray-500">{z.areas.join(", ") || "No areas listed"}</div>
+                    <div className="text-subtle">{z.areas.join(", ") || "No areas listed"}</div>
                   </div>
-                  <form action={deleteZone.bind(null, vendorId, z.id)}><Button variant="ghost" className="text-red-600">Remove</Button></form>
+                  <form action={deleteZone.bind(null, vendorId, z.id)}><Button variant="ghost" className="text-red-600 dark:text-red-400">Remove</Button></form>
                 </li>
               ))}
-              {!zones?.length && <li className="p-3 text-sm text-gray-500">No zones yet.</li>}
+              {!zones?.length && <li className="p-3 text-sm text-subtle">No zones yet.</li>}
             </ul>
             <ActionForm action={addZone.bind(null, vendorId)}>
               <div className="grid gap-4 sm:grid-cols-3">
@@ -137,7 +143,7 @@ export default async function SetupPage({ params, searchParams }: {
           <ActionForm action={savePayments.bind(null, vendorId)}>
             <h2 className="font-medium">Payments and order sheet</h2>
             {!canManage && <Notice tone="warn">Only the shop owner can change payment details.</Notice>}
-            <p className="text-sm text-gray-600">Bank transfer: the customer sends a receipt screenshot, the vendor confirms with one tap.</p>
+            <p className="text-sm text-muted">Bank transfer: the customer sends a receipt screenshot, the vendor confirms with one tap.</p>
             <div className="grid gap-4 sm:grid-cols-3">
               <Field label="Bank"><Input name="bank_name" defaultValue={vendor.bank_name ?? ""} placeholder="GTBank" /></Field>
               <Field label="Account number"><Input name="bank_account_number" defaultValue={vendor.bank_account_number ?? ""} inputMode="numeric" /></Field>
@@ -162,9 +168,9 @@ export default async function SetupPage({ params, searchParams }: {
             <h2 className="font-medium">Channels</h2>
             {!canManage && <Notice tone="warn">Only the shop owner can connect or disconnect channels.</Notice>}
             {(channels ?? []).map((c) => (
-              <div key={c.id} className="flex items-center justify-between rounded-lg bg-brand-50 p-3 text-sm">
+              <div key={c.id} className="flex items-center justify-between rounded-lg bg-accent-soft p-3 text-sm">
                 <span>{c.status === "error" ? "⚠ " : "✔ "}{c.type === "whatsapp" ? "WhatsApp" : "Instagram"} {c.status === "error" ? "needs reconnecting (its access expired):" : "connected:"} <b>{c.display_name ?? c.external_id}</b></span>
-                <form action={disconnectChannel.bind(null, vendorId, c.id)}><Button variant="ghost" className="text-red-600">Disconnect</Button></form>
+                <form action={disconnectChannel.bind(null, vendorId, c.id)}><Button variant="ghost" className="text-red-600 dark:text-red-400">Disconnect</Button></form>
               </div>
             ))}
             <Notice tone="info">
@@ -193,8 +199,8 @@ export default async function SetupPage({ params, searchParams }: {
         )}
 
         {next && (
-          <div className="mt-6 border-t border-gray-100 pt-4 text-right">
-            <Link href={`${base}?step=${next.id}`} className="text-sm font-medium text-brand-700">Next: {next.label.replace(/^\d\. /, "")} →</Link>
+          <div className="mt-6 border-t border-line pt-4 text-right">
+            <Link href={`${base}?step=${next.id}`} className="text-sm font-medium text-accent-text">Next: {next.label.replace(/^\d\. /, "")} →</Link>
           </div>
         )}
       </Card>

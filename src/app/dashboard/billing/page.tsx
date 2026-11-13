@@ -1,7 +1,8 @@
 import { requireOperator } from "@/lib/auth";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
-import { Badge, Card, Input, PageHeader } from "@/components/ui";
+import { Avatar, Badge, Card, Field, Input, PageHeader, Stat } from "@/components/ui";
+import { CalendarClock, Repeat } from "lucide-react";
 import { formatNaira } from "@/lib/money";
 import { recordSubscriptionPayment, saveBilling } from "../_actions/vendor";
 
@@ -16,31 +17,45 @@ export default async function BillingPage() {
 
   return (
     <>
-      <PageHeader title="Billing" description={`Your clients' subscriptions. Monthly recurring from live vendors: ${formatNaira(mrr)}.`} />
-      <div className="space-y-3">
+      <PageHeader title="Billing" description="What each vendor pays you, and when." />
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <Stat label="Monthly recurring" value={formatNaira(mrr)} hint="From live vendors" icon={<Repeat />} />
+        <Stat label="Payment due" value={(vendors ?? []).filter((v) => v.next_billing_date && v.next_billing_date < today).length} hint="Vendors past their bill date" icon={<CalendarClock />} />
+      </div>
+      <div className="space-y-4">
         {(vendors ?? []).map((v) => {
           const last = (payments ?? []).find((p) => p.vendor_id === v.id);
           const overdue = v.next_billing_date && v.next_billing_date < today;
           return (
-            <Card key={v.id}>
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <span className="font-medium">{v.name}</span>
-                {overdue && <Badge colour="red">Payment due {v.next_billing_date}</Badge>}
-                {last && <span className="text-xs text-gray-500">Last paid {formatNaira(last.amount_kobo)} on {last.paid_on}</span>}
+            <Card key={v.id} className="p-0 sm:p-0">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line px-4 py-3.5 sm:px-5">
+                <Avatar name={v.name} className="size-9 text-xs" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-semibold text-fg">{v.name}</div>
+                  <div className="text-xs text-subtle">{last ? `Last paid ${formatNaira(last.amount_kobo)} on ${last.paid_on}` : "No payments recorded"}</div>
+                </div>
+                {overdue ? <Badge colour="red">Due {v.next_billing_date}</Badge> : v.next_billing_date ? <Badge>Next {v.next_billing_date}</Badge> : null}
               </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <ActionForm action={saveBilling.bind(null, v.id)} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-4">
-                  <label className="text-xs text-gray-600">Setup fee ₦<Input name="setup_fee" defaultValue={v.setup_fee_kobo / 100} /></label>
-                  <label className="text-xs text-gray-600">Monthly ₦<Input name="monthly_fee" defaultValue={v.monthly_fee_kobo / 100} /></label>
-                  <label className="text-xs text-gray-600">Next bill<Input type="date" name="next_billing_date" defaultValue={v.next_billing_date ?? ""} /></label>
-                  <label className="text-xs text-gray-600" title="When a shop's AI spend reaches this in a day, new chats wait for a person.">AI cap $/day<Input name="ai_daily_budget_usd" inputMode="decimal" defaultValue={v.ai_daily_budget_usd} /></label>
-                  <SubmitButton variant="secondary" className="col-span-2 justify-self-start sm:col-span-4">Save plan</SubmitButton>
+              <div className="grid divide-y divide-line md:grid-cols-2 md:divide-x md:divide-y-0">
+                <ActionForm action={saveBilling.bind(null, v.id)} className="space-y-3 p-4 sm:p-5">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-subtle">Plan</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Setup fee (₦)"><Input name="setup_fee" inputMode="decimal" defaultValue={v.setup_fee_kobo / 100} /></Field>
+                    <Field label="Monthly (₦)"><Input name="monthly_fee" inputMode="decimal" defaultValue={v.monthly_fee_kobo / 100} /></Field>
+                    <Field label="Next bill"><Input type="date" name="next_billing_date" defaultValue={v.next_billing_date ?? ""} /></Field>
+                    <Field label="AI cap ($/day)"><Input name="ai_daily_budget_usd" inputMode="decimal" defaultValue={v.ai_daily_budget_usd} /></Field>
+                  </div>
+                  <p className="text-xs text-subtle">When a shop&apos;s AI spend reaches its cap in a day, new chats wait for a person.</p>
+                  <SubmitButton variant="secondary">Save plan</SubmitButton>
                 </ActionForm>
-                <ActionForm action={recordSubscriptionPayment.bind(null, v.id)} className="grid grid-cols-3 items-end gap-2">
-                  <label className="text-xs text-gray-600">Amount ₦<Input name="amount" defaultValue={v.monthly_fee_kobo / 100 || ""} /></label>
-                  <label className="text-xs text-gray-600">Paid on<Input type="date" name="paid_on" defaultValue={today} /></label>
-                  <label className="text-xs text-gray-600">Note<Input name="note" /></label>
-                  <SubmitButton className="col-span-3 justify-self-start">Record payment</SubmitButton>
+                <ActionForm action={recordSubscriptionPayment.bind(null, v.id)} className="space-y-3 p-4 sm:p-5">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-subtle">Record a payment</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Amount (₦)"><Input name="amount" inputMode="decimal" defaultValue={v.monthly_fee_kobo / 100 || ""} /></Field>
+                    <Field label="Paid on"><Input type="date" name="paid_on" defaultValue={today} /></Field>
+                    <Field label="Note" className="col-span-2"><Input name="note" placeholder="Optional" /></Field>
+                  </div>
+                  <SubmitButton>Record payment</SubmitButton>
                 </ActionForm>
               </div>
             </Card>

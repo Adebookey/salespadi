@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { getVendorForUser } from "@/lib/auth";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { Empty, OrderStatusBadge, PageHeader, cn, lagosDateTime } from "@/components/ui";
+import { Empty, FilterChips, List, OrderStatusBadge, PageHeader, lagosDateTime } from "@/components/ui";
+import { ShoppingBag } from "lucide-react";
 import { formatNaira } from "@/lib/money";
 import { ORDER_STATUS_LABEL, type Order, type OrderStatus } from "@/lib/types";
 
@@ -16,35 +17,62 @@ export default async function OrdersPage({ params, searchParams }: { params: Pro
   const orders = (data ?? []) as Order[];
   const filters = [["open", "Open"], ...Object.entries(ORDER_STATUS_LABEL), ["all", "All"]];
 
+  const base = `/dashboard/v/${vendorId}/orders`;
+  const method = { paystack: "Card / bank", transfer: "Transfer", cod: "On delivery" } as const;
+
   return (
     <>
       <AutoRefresh seconds={20} />
-      <PageHeader title="Orders" description="Every order from both channels." />
-      <div className="mb-4 flex gap-1 overflow-x-auto">
-        {filters.map(([id, label]) => (
-          <Link key={id} href={`?s=${id}`} className={cn("whitespace-nowrap rounded-full px-3 py-1 text-sm", (s ?? "open") === id ? "bg-gray-900 text-white" : "bg-white text-gray-700 ring-1 ring-gray-200")}>{label}</Link>
-        ))}
-      </div>
-      {orders.length === 0 ? <Empty title="No orders here" /> : (
-        <div className="overflow-x-auto rounded-xl bg-white ring-1 ring-gray-200">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-gray-100 text-xs uppercase text-gray-500">
-              <tr><th className="p-3">Order</th><th className="p-3">Customer</th><th className="p-3">Total</th><th className="p-3">Payment</th><th className="p-3">Status</th><th className="p-3">Date</th></tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {orders.map((o) => (
-                <tr key={o.id} className="hover:bg-gray-50">
-                  <td className="p-3 font-medium"><Link href={`/dashboard/v/${vendorId}/orders/${o.id}`} className="text-brand-700">#{o.number}</Link></td>
-                  <td className="p-3">{o.customer_name ?? "-"}<div className="text-xs text-gray-500">{o.customer_phone}</div></td>
-                  <td className="p-3">{formatNaira(o.total_kobo)}</td>
-                  <td className="p-3 capitalize">{o.payment_method ?? "-"}</td>
-                  <td className="p-3"><OrderStatusBadge status={o.status} /></td>
-                  <td className="whitespace-nowrap p-3 text-gray-500">{lagosDateTime(o.created_at)}</td>
+      <PageHeader title="Orders" description="Every order from WhatsApp and Instagram." />
+      <FilterChips active={s ?? "open"} items={filters.map(([id, label]) => ({ id, label, href: `?s=${id}` }))} />
+      {orders.length === 0 ? <Empty icon={<ShoppingBag />} title="No orders here">Orders the assistant takes show up here.</Empty> : (
+        <>
+          {/* Phones: one card per order */}
+          <List className="md:hidden">
+            {orders.map((o) => (
+              <li key={o.id}>
+                <Link href={`${base}/${o.id}`} className="block px-4 py-3.5 transition hover:bg-surface-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[15px] font-semibold text-fg">#{o.number}</span>
+                    <span className="tabular text-[15px] font-semibold text-fg">{formatNaira(o.total_kobo)}</span>
+                  </div>
+                  <div className="mt-0.5 flex items-center justify-between gap-3">
+                    <span className="truncate text-sm text-muted">{o.customer_name ?? "Customer"}</span>
+                    <OrderStatusBadge status={o.status} />
+                  </div>
+                  <div className="mt-1 text-xs text-subtle">{lagosDateTime(o.created_at)}{o.payment_method ? ` · ${method[o.payment_method]}` : ""}</div>
+                </Link>
+              </li>
+            ))}
+          </List>
+
+          {/* Desktop: table */}
+          <div className="hidden overflow-hidden rounded-xl border border-line bg-surface shadow-card md:block">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-line bg-surface-2/60 text-xs font-medium text-subtle">
+                <tr>
+                  <th className="px-5 py-3 font-medium">Order</th><th className="px-5 py-3 font-medium">Customer</th>
+                  <th className="px-5 py-3 text-right font-medium">Total</th><th className="px-5 py-3 font-medium">Payment</th>
+                  <th className="px-5 py-3 font-medium">Status</th><th className="px-5 py-3 font-medium">Date</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {orders.map((o) => (
+                  <tr key={o.id} className="group relative transition hover:bg-surface-2">
+                    <td className="px-5 py-3.5 font-semibold text-fg">
+                      <Link href={`${base}/${o.id}`} className="after:absolute after:inset-0">#{o.number}</Link>
+                    </td>
+                    <td className="px-5 py-3.5"><div className="text-fg">{o.customer_name ?? "-"}</div><div className="text-xs text-subtle">{o.customer_phone}</div></td>
+                    <td className="tabular px-5 py-3.5 text-right font-medium text-fg">{formatNaira(o.total_kobo)}</td>
+                    <td className="px-5 py-3.5 text-muted">{o.payment_method ? method[o.payment_method] : "-"}</td>
+                    <td className="px-5 py-3.5"><OrderStatusBadge status={o.status} /></td>
+                    <td className="whitespace-nowrap px-5 py-3.5 text-subtle">{lagosDateTime(o.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </>
   );

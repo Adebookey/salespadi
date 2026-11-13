@@ -1,16 +1,123 @@
 @import "tailwindcss";
 
-@theme {
-  --color-brand-50: #ecfdf3;
-  --color-brand-100: #d1fadf;
-  --color-brand-500: #12b76a;
-  --color-brand-600: #039855;
-  --color-brand-700: #027a48;
-  --color-brand-900: #054f31;
+/* Dark mode follows the .dark class on <html> (set from the "theme" cookie; dark is the default). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design tokens. Components use these semantic colours (bg-surface, text-muted, border-line, …)
+ * instead of raw greys, so every screen switches theme in one place.
+ */
+:root {
+  --canvas: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #f2f4f7;
+  --surface-3: #e8ebf0;
+  --line: #e3e7ed;
+  --line-strong: #cfd5de;
+  --fg: #0f1724;
+  --muted: #4a5567;
+  --subtle: #6b7686;
+  --accent: #0b8a4f;
+  --accent-hover: #097443;
+  --accent-fg: #ffffff;
+  --accent-soft: #e6f6ee;
+  --accent-text: #08743f;
+  --focus: #12b76a;
+  --overlay: rgb(15 23 36 / 0.45);
+  --chat-bg: #efeae2;
+  --bubble-in: #ffffff;
+  --bubble-out: #d9fdd3;
+  --bubble-team: #dbe8fe;
+  --shadow: 0 1px 2px rgb(16 24 40 / 0.05), 0 1px 3px rgb(16 24 40 / 0.06);
+  color-scheme: light;
+}
+
+.dark {
+  --canvas: #0a0d12;
+  --surface: #11161d;
+  --surface-2: #171d26;
+  --surface-3: #212833;
+  --line: #222a35;
+  --line-strong: #323c4a;
+  --fg: #e7ebf0;
+  --muted: #a4aebc;
+  --subtle: #7c8797;
+  --accent: #14a05e;
+  --accent-hover: #1bb86d;
+  --accent-fg: #ffffff;
+  --accent-soft: rgb(23 178 106 / 0.13);
+  --accent-text: #4fd394;
+  --focus: #32d583;
+  --overlay: rgb(0 0 0 / 0.6);
+  --chat-bg: #0b141a;
+  --bubble-in: #1d2a32;
+  --bubble-out: #0b4d3f;
+  --bubble-team: #1c3354;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-focus: var(--focus);
+  --color-overlay: var(--overlay);
+  --color-chat: var(--chat-bg);
+  --color-bubble-in: var(--bubble-in);
+  --color-bubble-out: var(--bubble-out);
+  --color-bubble-team: var(--bubble-team);
+  --shadow-card: var(--shadow);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+html {
+  background: var(--canvas);
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
-  background: #f7f8f7;
-  color: #101828;
+  background: var(--canvas);
+  color: var(--fg);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Money and counts line up in columns. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Space for the phone's home indicator under fixed bottom bars. */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* Thin, theme-aware scrollbars on desktop. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* Hide horizontal scrollbars on chip rows while keeping them swipeable. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }

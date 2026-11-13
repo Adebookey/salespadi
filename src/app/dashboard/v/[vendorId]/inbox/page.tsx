@@ -1,14 +1,16 @@
 import Link from "next/link";
+import { MessageCircle } from "lucide-react";
+import { ChannelDot } from "@/components/channel-dot";
 import { getVendorForUser } from "@/lib/auth";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { Badge, Empty, PageHeader, cn, timeAgo } from "@/components/ui";
+import { Avatar, Badge, Empty, FilterChips, List, PageHeader, cn, timeAgo } from "@/components/ui";
 import type { Conversation, Customer } from "@/lib/types";
 
 const FILTERS = [
   { id: "all", label: "All" },
   { id: "attention", label: "Needs a person" },
-  { id: "human", label: "Handled by team" },
-  { id: "ai", label: "AI" },
+  { id: "human", label: "Team replying" },
+  { id: "ai", label: "AI replying" },
 ];
 
 export default async function InboxPage({ params, searchParams }: { params: Promise<{ vendorId: string }>; searchParams: Promise<{ f?: string }> }) {
@@ -33,41 +35,40 @@ export default async function InboxPage({ params, searchParams }: { params: Prom
   return (
     <>
       <AutoRefresh seconds={15} />
-      <PageHeader title="Inbox" description="WhatsApp and Instagram in one place." />
-      <div className="mb-4 flex gap-1 overflow-x-auto">
-        {FILTERS.map((x) => (
-          <Link key={x.id} href={`?f=${x.id}`} className={cn("whitespace-nowrap rounded-full px-3 py-1 text-sm", f === x.id ? "bg-gray-900 text-white" : "bg-white text-gray-700 ring-1 ring-gray-200")}>{x.label}</Link>
-        ))}
-      </div>
-      {convs.length === 0 ? <Empty title="No conversations here" /> : (
-        <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl bg-white ring-1 ring-gray-200">
+      <PageHeader title="Inbox" description="WhatsApp and Instagram chats in one place." />
+      <FilterChips active={f} items={FILTERS.map((x) => ({ ...x, href: `?f=${x.id}` }))} />
+      {convs.length === 0 ? <Empty icon={<MessageCircle />} title="No conversations here">New chats appear as customers message the shop.</Empty> : (
+        <List>
           {convs.map((c) => {
             const m = last.get(c.id);
+            const name = c.customer.name ?? c.customer.phone ?? "Customer";
+            const preview = m ? `${m.direction === "out" ? "You: " : ""}${m.type === "image" && !m.content ? "📷 Photo" : m.type === "audio" ? "🎤 Voice note" : m.content}` : "";
             return (
               <li key={c.id}>
-                <Link href={`/dashboard/v/${vendorId}/inbox/${c.id}`} className="flex gap-3 p-3 hover:bg-gray-50">
-                  <div className={cn("mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white", c.channel_type === "whatsapp" ? "bg-green-600" : "bg-pink-600")}>
-                    {c.channel_type === "whatsapp" ? "WA" : "IG"}
-                  </div>
+                <Link href={`/dashboard/v/${vendorId}/inbox/${c.id}`} className="flex gap-3 px-4 py-3.5 transition hover:bg-surface-2">
+                  <span className="relative">
+                    <Avatar name={name.replace(/^@/, "")} className="size-11" />
+                    <ChannelDot type={c.channel_type} />
+                  </span>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate font-medium">{c.customer.name ?? c.customer.phone ?? "Customer"}</span>
-                      <span className="shrink-0 text-xs text-gray-500">{timeAgo(c.last_message_at)}</span>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className={cn("truncate text-[15px] text-fg", c.needs_attention ? "font-semibold" : "font-medium")}>{name}</span>
+                      <span className={cn("shrink-0 text-xs", c.needs_attention ? "font-medium text-amber-600 dark:text-amber-400" : "text-subtle")}>{timeAgo(c.last_message_at)}</span>
                     </div>
-                    <div className="truncate text-sm text-gray-600">
-                      {m ? `${m.direction === "out" ? "You: " : ""}${m.type === "image" && !m.content ? "📷 Photo" : m.type === "audio" ? "🎤 Voice note" : m.content}` : ""}
-                    </div>
-                    <div className="mt-1 flex gap-1">
-                      {c.needs_attention && <Badge colour="amber">Needs a person</Badge>}
-                      {c.status === "human" && <Badge colour="blue">Team</Badge>}
-                      {c.handoff_reason && c.needs_attention && <span className="truncate text-xs text-amber-700">{c.handoff_reason}</span>}
-                    </div>
+                    <div className={cn("mt-0.5 line-clamp-1 text-sm", c.needs_attention ? "text-fg" : "text-muted")}>{preview}</div>
+                    {(c.needs_attention || c.status === "human") && (
+                      <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
+                        {c.needs_attention && <Badge colour="amber">Needs a person</Badge>}
+                        {c.status === "human" && !c.needs_attention && <Badge colour="blue">Team replying</Badge>}
+                        {c.handoff_reason && c.needs_attention && <span className="truncate text-xs text-subtle">{c.handoff_reason}</span>}
+                      </div>
+                    )}
                   </div>
                 </Link>
               </li>
             );
           })}
-        </ul>
+        </List>
       )}
     </>
   );

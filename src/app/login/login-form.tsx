@@ -46,7 +46,8 @@ export function LoginForm({ next, error }: { next: string; error?: string }) {
         <Field label="Password">
           <Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </Field>
-        <Button type="submit" className="w-full" disabled={busy || !password}>Sign in</Button>
+        <Button type="submit" className="w-full" disabled={busy || !password}>{busy ? "Signing in…" : "Sign in"}</Button>
+        <div className="flex items-center gap-3 text-xs text-subtle"><span className="h-px flex-1 bg-line" />or<span className="h-px flex-1 bg-line" /></div>
         <Button type="button" variant="secondary" className="w-full" disabled={busy} onClick={magicLink}>
           Email me a sign-in link
         </Button>
