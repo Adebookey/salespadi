@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { ChevronDown, ImagePlus, RotateCcw, SendHorizontal, Sparkles } from "lucide-react";
 import { Badge, Button, Card, Notice, cn } from "@/components/ui";
 import { runStudio, type StudioResult, type StudioState, type StudioTurn } from "../../../_actions/studio";
@@ -23,6 +23,14 @@ export function Studio({ vendorId }: { vendorId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const file = useRef<HTMLInputElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+
+  // Keep the newest message in view.
+  useEffect(() => {
+    const el = scroller.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [items, pending, error]);
 
   function send(message = text) {
     if (!message.trim() && !image) return;
@@ -32,6 +40,9 @@ export function Studio({ vendorId }: { vendorId: string }) {
     setText("");
     setImage(undefined);
     setError(null);
+    // On a phone, line the whole chat up between the top bar and the tab bar so the reply box stays in view.
+    const r = box.current?.getBoundingClientRect();
+    if (r && (r.top < 0 || r.bottom > window.innerHeight)) box.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     start(async () => {
       const r = await runStudio(vendorId, history, message, sentImage, state);
       if (r.error) { setError(r.error); return; }
@@ -65,8 +76,8 @@ export function Studio({ vendorId }: { vendorId: string }) {
         {samples}
       </div>
 
-      <div className="-mx-4 flex min-h-[60dvh] flex-col overflow-hidden border-y border-line sm:mx-0 sm:rounded-xl sm:border sm:shadow-card">
-        <div className="flex flex-1 flex-col gap-3 bg-chat px-3 py-4 sm:px-5">
+      <div ref={box} className="-mx-4 flex h-[calc(100dvh-8.5rem)] min-h-[24rem] scroll-mt-[4.25rem] flex-col overflow-hidden border-y border-line sm:mx-0 sm:rounded-xl sm:border sm:shadow-card md:h-[calc(100dvh-12rem)]">
+        <div ref={scroller} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain bg-chat px-3 py-4 sm:px-5">
           {items.length === 0 && (
             <div className="m-auto max-w-xs text-center">
               <Sparkles className="mx-auto mb-3 size-7 text-subtle" />
@@ -113,7 +124,7 @@ export function Studio({ vendorId }: { vendorId: string }) {
           )}
         </div>
 
-        <div className="sticky bottom-16 z-10 space-y-2 border-t border-line bg-surface/95 px-3 py-2.5 backdrop-blur-xl sm:px-4 md:bottom-0">
+        <div className="shrink-0 space-y-2 border-t border-line bg-surface px-3 py-2.5 sm:px-4">
           {error && <Notice tone="error">{error}</Notice>}
           {image && (
             <div className="flex items-center gap-2 text-xs text-muted">
