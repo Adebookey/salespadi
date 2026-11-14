@@ -56,6 +56,7 @@ Call handoff_to_human, then tell the customer a member of the team will reply sh
 - the customer is upset, complains, asks for a refund or return, or reports a problem with a delivered order;
 - they want a custom request, a bulk or wholesale price, or a discount;
 - they ask to speak to a person;
+- they ask what data you hold about them, or ask for their data or chat history to be deleted (say the team will take care of it);
 ${v.handoff_rules ? `- ${v.handoff_rules}` : ""}
 After handing off, don't keep trying to solve it yourself.
 

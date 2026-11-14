@@ -150,4 +150,35 @@ do $$ declare r record; begin
   assert exists (select 1 from jobs where dedupe_key = 'once:remind:1'), 'once key kept';
 end $$;
 
+-- delete_customer_data erases the customer and anonymises their orders
+do $$
+declare
+  cust uuid; conv uuid; o orders; paths text[];
+  v uuid := '11111111-0000-0000-0000-000000000001';
+begin
+  insert into customers (vendor_id, channel_type, external_user_id, name, phone, address)
+  values (v, 'whatsapp', '2348099998888', 'Ada Test', '2348099998888', '1 Secret St') returning id into cust;
+  insert into conversations (vendor_id, customer_id, channel_type) values (v, cust, 'whatsapp') returning id into conv;
+  insert into messages (vendor_id, conversation_id, direction, sender, type, content, media_url)
+  values (v, conv, 'in', 'customer', 'image', 'my receipt', v::text || '/' || conv::text || '/m1.jpg');
+  insert into webhook_events (source, external_id, payload) values ('whatsapp', 'del-test', '{"from":"2348099998888"}');
+  o := public.place_order(v, cust, conv, '[{"variant_id":"cccccccc-0000-0000-0000-000000000001","quantity":1}]',
+    'eeeeeeee-0000-0000-0000-000000000001', '1 Secret St', 'Ada Test', '2348099998888', 'ring the bell');
+
+  paths := public.delete_customer_data(v, cust);
+  assert array_length(paths, 1) = 1, 'returns media paths';
+  assert not exists (select 1 from customers where id = cust), 'customer gone';
+  assert not exists (select 1 from messages where conversation_id = conv), 'messages gone';
+  assert not exists (select 1 from webhook_events where external_id = 'del-test'), 'raw webhook gone';
+  assert (select customer_name from orders where id = o.id) = 'Deleted customer', 'order anonymised';
+  assert (select customer_phone is null and delivery_address is null and notes is null from orders where id = o.id), 'order details cleared';
+  assert (select total_kobo from orders where id = o.id) = o.total_kobo, 'order totals kept';
+  begin
+    perform public.delete_customer_data('22222222-0000-0000-0000-000000000002', cust);
+    raise exception 'should not find it';
+  exception when raise_exception then
+    assert sqlerrm = 'Customer not found', sqlerrm;
+  end;
+end $$;
+
 select 'RLS + function tests passed' as result;

@@ -5,6 +5,8 @@ import { adminClient } from "@/lib/supabase/admin";
 import { sendToConversation, WindowClosedError } from "@/lib/services/messaging";
 import { enqueue } from "@/lib/jobs";
 import { audit } from "@/lib/services/notify";
+import { deleteCustomerData } from "@/lib/services/privacy";
+import { redirect } from "next/navigation";
 import type { ActionState } from "./vendor";
 
 async function ownConversation(vendorId: string, conversationId: string) {
@@ -53,4 +55,16 @@ export async function markResolved(vendorId: string, conversationId: string) {
   await supabase.from("conversations").update({ needs_attention: false }).eq("id", conversationId);
   revalidatePath(`/dashboard/v/${vendorId}/inbox`, "layout");
   revalidatePath("/dashboard/escalations");
+}
+
+/** Owner-only: erase this customer's chats, photos and personal details. Orders keep their amounts. */
+export async function eraseCustomer(vendorId: string, conversationId: string) {
+  const { supabase, user } = await ownConversation(vendorId, conversationId);
+  const { data: isOwner } = await supabase.rpc("is_vendor_owner", { v: vendorId });
+  if (!isOwner) throw new Error("Only the shop owner can delete customer data.");
+  const { data: conv } = await supabase.from("conversations").select("customer_id").eq("id", conversationId).single();
+  if (!conv) throw new Error("Conversation not found");
+  await deleteCustomerData(adminClient(), vendorId, conv.customer_id, user.id);
+  revalidatePath(`/dashboard/v/${vendorId}/inbox`, "layout");
+  redirect(`/dashboard/v/${vendorId}/inbox`);
 }

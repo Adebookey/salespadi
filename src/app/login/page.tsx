@@ -20,6 +20,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </div>
         <LoginForm next={next ?? "/dashboard"} error={error} />
         <p className="mt-6 text-center text-xs text-subtle">Your padi for selling on WhatsApp and Instagram.</p>
+        <p className="mt-2 text-center text-xs text-subtle"><a href="/privacy" className="hover:text-fg">Privacy</a> · <a href="/data-deletion" className="hover:text-fg">Delete your data</a></p>
       </div>
     </main>
   );

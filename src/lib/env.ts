@@ -32,3 +32,5 @@ export const env = {
 
 export const instagramAppSecret = () => process.env.INSTAGRAM_APP_SECRET || env.metaAppSecret;
 export const transcriptionModel = () => process.env.TRANSCRIPTION_MODEL || "whisper-1";
+/** Shown on the privacy and data-deletion pages. Leave empty to show only the in-chat route. */
+export const contactEmail = () => process.env.CONTACT_EMAIL || "";

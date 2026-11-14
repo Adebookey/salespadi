@@ -9,7 +9,8 @@ import { Avatar, Button, Card, CardHeader, Notice, OrderStatusBadge, cn } from "
 import { windowOpen } from "@/lib/services/messaging";
 import { formatNaira } from "@/lib/money";
 import type { Conversation, Customer, Message, Order } from "@/lib/types";
-import { markResolved, sendHumanReply, setConversationStatus } from "../../../../_actions/inbox";
+import { eraseCustomer, markResolved, sendHumanReply, setConversationStatus } from "../../../../_actions/inbox";
+import { EraseCustomer } from "./erase-customer";
 import { ReplyComposer } from "./reply-composer";
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString("en-NG", { timeZone: "Africa/Lagos", hour: "2-digit", minute: "2-digit" });
@@ -35,6 +36,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ v
     urls?.forEach((u) => u.path && u.signedUrl && signed.set(u.path, u.signedUrl));
   }
   const open = windowOpen(conv.last_inbound_at);
+  const { data: canManage } = await supabase.rpc("is_vendor_owner", { v: vendorId });
   const act = setConversationStatus.bind(null, vendorId, conversationId);
   const name = conv.customer.name ?? conv.customer.phone ?? "Customer";
   const base = `/dashboard/v/${vendorId}`;
@@ -53,6 +55,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ v
             <Phone className="size-4" /> Call customer
           </a>
         )}
+        {canManage && <EraseCustomer name={name} onConfirm={eraseCustomer.bind(null, vendorId, conversationId)} />}
       </Card>
       <Card className="p-0 sm:p-0">
         <h2 className="px-4 pb-1 pt-4 text-[15px] font-semibold text-fg sm:px-5">Orders</h2>
