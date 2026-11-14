@@ -17,6 +17,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Stand-alone Node scripts that build the logo files; not part of the app.
+    "design/**",
   ]),
 ]);
 
