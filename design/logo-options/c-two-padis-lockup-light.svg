@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="112" viewBox="0 0 440 112">
+    <style>@font-face{font-family:Geist;src:url(geist.woff2)}text{font-family:Geist,Inter,system-ui,sans-serif}</style>
+    <rect width="440" height="112" fill="#ffffff"/>
+    <g transform="translate(24 24)">
+    <defs><linearGradient id="g-c-two-padis-64" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14a05e"/><stop offset="1" stop-color="#0b8a4f"/></linearGradient></defs>
+    <rect width="64" height="64" rx="15" fill="url(#g-c-two-padis-64)"/>
+    
+      <path fill="#4fd394" d="M18 11H34Q42 11 42 19V30Q42 38 34 38H19L11 45.5L12.2 37.4Q8 35.7 8 30V21Q8 11 18 11Z"/>
+      <path fill="#ffffff" stroke="#0b8a4f" stroke-width="3.5" stroke-linejoin="round"
+        d="M30 22.5H46Q56 22.5 56 32.5V41Q56 46.7 51.8 48.4L53 56.5L45 49.5H30Q22 49.5 22 41.5V30.5Q22 22.5 30 22.5Z"/>
+      <circle cx="31.5" cy="36" r="2.6" fill="#0b8a4f"/><circle cx="39" cy="36" r="2.6" fill="#0b8a4f"/><circle cx="46.5" cy="36" r="2.6" fill="#0b8a4f"/>
+  </g>
+    <text x="106" y="70" font-size="40" font-weight="650" letter-spacing="-1"><tspan fill="#0f1724">Sales</tspan><tspan fill="#0b8a4f">Padi</tspan></text>
+  </svg>
