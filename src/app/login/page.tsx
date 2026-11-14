@@ -14,7 +14,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <ThemeToggle initial={theme} className="absolute right-3 top-3" />
       <div className="relative w-full max-w-sm">
         <div className="mb-8 text-center">
-          <LogoMark className="mx-auto mb-4 size-12 rounded-2xl [&>svg]:size-7" />
+          <LogoMark className="mx-auto mb-4 size-14 rounded-2xl" />
           <h1 className="text-2xl font-semibold tracking-tight text-fg">Welcome back</h1>
           <p className="mt-1.5 text-sm text-muted">Sign in to SalesPadi</p>
         </div>
