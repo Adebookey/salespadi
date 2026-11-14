@@ -18,7 +18,7 @@ export const env = {
   get aiModelHard() { return optional("AI_MODEL_HARD", "claude-sonnet-5-5"); },
   get metaAppSecret() { return required("META_APP_SECRET"); },
   get metaVerifyToken() { return required("META_VERIFY_TOKEN"); },
-  get metaGraphVersion() { return optional("META_GRAPH_VERSION", "v23.0"); },
+  get metaGraphVersion() { return optional("META_GRAPH_VERSION", "v25.0"); },
   get platformWaPhoneNumberId() { return optional("PLATFORM_WA_PHONE_NUMBER_ID"); },
   get platformWaAccessToken() { return optional("PLATFORM_WA_ACCESS_TOKEN"); },
   get platformWaAlertTemplate() { return optional("PLATFORM_WA_ALERT_TEMPLATE", "vendor_alert"); },
